@@ -75,7 +75,7 @@ class Guest {
       'invited_via': invitedVia.tomlValue,
       'platform': platform,
       'follow_up_count': followUpCount,
-      'last_follow_up': lastFollowUp,
+      if (lastFollowUp != null) 'last_follow_up': lastFollowUp,
       'notes': notes,
     };
   }

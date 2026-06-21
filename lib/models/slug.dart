@@ -7,7 +7,8 @@
 ///   "Bob O'Reilly"     -> "bob-oreilly"
 String slugify(String input) {
   final lower = input.trim().toLowerCase();
-  final withHyphens = lower.replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+  final noApostrophes = lower.replaceAll(RegExp(r"['’]"), '');
+  final withHyphens = noApostrophes.replaceAll(RegExp(r'[^a-z0-9]+'), '-');
   final trimmed = withHyphens.replaceAll(RegExp(r'^-+|-+$'), '');
   final collapsed = trimmed.replaceAll(RegExp(r'-+'), '-');
   return collapsed.isEmpty ? 'untitled' : collapsed;
