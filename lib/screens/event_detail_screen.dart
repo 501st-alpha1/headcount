@@ -7,6 +7,7 @@ import '../models/guest.dart';
 import '../models/person.dart';
 import '../providers/data_providers.dart';
 import '../repository/repository.dart';
+import 'add_guest_screen.dart';
 import 'event_editor_screen.dart';
 import 'widgets/guest_rsvp_sheet.dart';
 import 'widgets/guest_row.dart';
@@ -148,8 +149,11 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // Add-guest search (people/groups/tags unified search) is
-          // built in an upcoming step.
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => AddGuestScreen(eventId: event!.id),
+            ),
+          );
         },
         tooltip: 'Add guest',
         child: const Icon(Icons.person_add_outlined),
