@@ -3,10 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/event.dart';
 import '../providers/data_providers.dart';
+import '../repository/load_result.dart';
 import 'archive_screen.dart';
 import 'event_detail_screen.dart';
 import 'event_editor_screen_placeholder.dart';
 import 'widgets/event_card.dart';
+import 'widgets/load_issues_banner.dart';
 
 /// The app's home screen: pinned events (upcoming, or recently past and
 /// still within the grace period), soonest first, with a way to reach
@@ -34,7 +36,10 @@ class HomeScreen extends ConsumerWidget {
         ],
       ),
       body: switch (snapshotAsync) {
-        AsyncData(:final value) => _HomeBody(events: value.eventsOnHomeScreen),
+        AsyncData(:final value) => _HomeBody(
+            events: value.eventsOnHomeScreen,
+            issues: value.issues,
+          ),
         AsyncError(:final error) => _ErrorState(error: error),
         _ => const Center(child: CircularProgressIndicator()),
       },
@@ -55,34 +60,41 @@ class HomeScreen extends ConsumerWidget {
 
 class _HomeBody extends StatelessWidget {
   final List<Event> events;
+  final List<LoadIssue> issues;
 
-  const _HomeBody({required this.events});
+  const _HomeBody({required this.events, required this.issues});
 
   @override
   Widget build(BuildContext context) {
-    if (events.isEmpty) {
-      return const _EmptyState();
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: events.length,
-      itemBuilder: (context, index) {
-        final event = events[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: EventCard(
-            event: event,
-            onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => EventDetailScreen(eventId: event.id),
+    return Column(
+      children: [
+        LoadIssuesBanner(issues: issues),
+        Expanded(
+          child: events.isEmpty
+              ? const _EmptyState()
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: events.length,
+                  itemBuilder: (context, index) {
+                    final event = events[index];
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: EventCard(
+                        event: event,
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  EventDetailScreen(eventId: event.id),
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
-        );
-      },
+        ),
+      ],
     );
   }
 }
