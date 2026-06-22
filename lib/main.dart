@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'providers/data_providers.dart';
 import 'screens/first_launch_screen.dart';
-import 'screens/home_screen_placeholder.dart';
+import 'screens/home_screen.dart';
 import 'services/app_settings.dart';
 import 'theme/app_theme.dart';
 
@@ -41,7 +41,7 @@ class HeadcountApp extends ConsumerWidget {
       themeMode: ThemeMode.system,
       home: dataDirectory == null
           ? const FirstLaunchScreen()
-          : const HomeScreenPlaceholder(),
+          : const HomeScreen(),
     );
   }
 }
