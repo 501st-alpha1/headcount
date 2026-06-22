@@ -7,6 +7,7 @@ import '../models/guest.dart';
 import '../models/person.dart';
 import '../providers/data_providers.dart';
 import '../repository/repository.dart';
+import 'event_editor_screen.dart';
 import 'widgets/guest_rsvp_sheet.dart';
 import 'widgets/guest_row.dart';
 
@@ -90,7 +91,22 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
     final grouped = _groupByStatus(filtered);
 
     return Scaffold(
-      appBar: AppBar(title: Text(event.name)),
+      appBar: AppBar(
+        title: Text(event.name),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Edit event',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => EventEditorScreen(eventId: event!.id),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(

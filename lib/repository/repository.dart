@@ -72,6 +72,35 @@ class DataSnapshot {
     return result;
   }
 
+  /// All distinct interest tags currently in use across every person,
+  /// sorted alphabetically. This is the basis for tag autocomplete/search —
+  /// there's no separate tag registry file (see the design doc), so this
+  /// is computed fresh from people/ each time.
+  List<String> get allTagsInUse {
+    final tags = <String>{};
+    for (final person in people) {
+      for (final interest in person.interests) {
+        if (interest.tag.isNotEmpty) tags.add(interest.tag);
+      }
+    }
+    final sorted = tags.toList()..sort();
+    return sorted;
+  }
+
+  /// All people with an interest tag matching [tagName] (case-sensitive,
+  /// exact match — tag values are normalized by the editor UI, not here),
+  /// each paired with their InterestTag for that tag so callers can sort/
+  /// group by level. Sorted by InterestLevel.sortRank (enthusiastic first).
+  List<(Person, InterestTag)> peopleWithTag(String tagName) {
+    final result = <(Person, InterestTag)>[];
+    for (final person in people) {
+      final interest = person.interestIn(tagName);
+      if (interest != null) result.add((person, interest));
+    }
+    result.sort((a, b) => a.$2.level.sortRank.compareTo(b.$2.level.sortRank));
+    return result;
+  }
+
   /// All guests on [event], each paired with the Person they refer to.
   /// Guests whose person_id has no matching Person are silently skipped
   /// (this should never happen in practice — saveEvent rejects dangling

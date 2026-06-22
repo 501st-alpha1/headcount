@@ -6,7 +6,7 @@ import '../providers/data_providers.dart';
 import '../repository/load_result.dart';
 import 'archive_screen.dart';
 import 'event_detail_screen.dart';
-import 'event_editor_screen_placeholder.dart';
+import 'event_editor_screen.dart';
 import 'people_list_screen.dart';
 import 'widgets/event_card.dart';
 import 'widgets/load_issues_banner.dart';
@@ -57,7 +57,7 @@ class HomeScreen extends ConsumerWidget {
         onPressed: () {
           Navigator.of(context).push(
             MaterialPageRoute(
-              builder: (_) => const EventEditorScreenPlaceholder(),
+              builder: (_) => const EventEditorScreen(),
             ),
           );
         },

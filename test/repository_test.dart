@@ -513,4 +513,72 @@ void main() {
       expect(resolved.first.$2.name, 'Alice Chen');
     });
   });
+
+  group('DataSnapshot.allTagsInUse and peopleWithTag', () {
+    test('allTagsInUse returns distinct sorted tags across all people',
+        () async {
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [
+          const InterestTag(tag: 'hiking', level: InterestLevel.lovesIt),
+          const InterestTag(tag: 'board_games', level: InterestLevel.easyOnly),
+        ],
+      );
+      await repo.people.create(
+        name: 'Bob Smith',
+        interests: [
+          const InterestTag(tag: 'hiking', level: InterestLevel.needsConvincing),
+        ],
+      );
+
+      final snapshot = await repo.loadAll();
+      expect(snapshot.allTagsInUse, ['board_games', 'hiking']);
+    });
+
+    test('peopleWithTag sorts by interest level, enthusiastic first',
+        () async {
+      await repo.people.create(
+        name: 'Charlie Diaz',
+        interests: [
+          const InterestTag(tag: 'hiking', level: InterestLevel.notInterested),
+        ],
+      );
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [
+          const InterestTag(tag: 'hiking', level: InterestLevel.lovesIt),
+        ],
+      );
+      await repo.people.create(
+        name: 'Bob Smith',
+        interests: [
+          const InterestTag(tag: 'hiking', level: InterestLevel.easyOnly),
+        ],
+      );
+
+      final snapshot = await repo.loadAll();
+      final results = snapshot.peopleWithTag('hiking');
+
+      expect(results, hasLength(3));
+      expect(results[0].$1.name, 'Alice Chen');
+      expect(results[1].$1.name, 'Bob Smith');
+      expect(results[2].$1.name, 'Charlie Diaz');
+    });
+
+    test('peopleWithTag excludes people without that tag', () async {
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [
+          const InterestTag(tag: 'hiking', level: InterestLevel.lovesIt),
+        ],
+      );
+      await repo.people.create(name: 'Bob Smith');
+
+      final snapshot = await repo.loadAll();
+      final results = snapshot.peopleWithTag('hiking');
+
+      expect(results, hasLength(1));
+      expect(results.first.$1.name, 'Alice Chen');
+    });
+  });
 }
