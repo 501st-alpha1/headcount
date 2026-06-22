@@ -442,4 +442,56 @@ void main() {
       expect(archive.last.name, 'Older');
     });
   });
+
+  group('DataSnapshot.resolvedGuestsFor', () {
+    test('pairs each guest with their Person', () async {
+      final alice = await repo.people.create(name: 'Alice Chen');
+      final bob = await repo.people.create(name: 'Bob Smith');
+      var event = await repo.events.create(
+        name: 'Summer Picnic',
+        date: const SimpleDate(year: 2026, month: 8, day: 15),
+      );
+      event = event.copyWith(guests: [
+        Guest(personId: alice.id, rsvp: RsvpStatus.yes, invitedVia: InviteMethod.dm),
+        Guest(personId: bob.id, rsvp: RsvpStatus.noResponse, invitedVia: InviteMethod.dm),
+      ]);
+      await repo.saveEvent(event);
+
+      final snapshot = await repo.loadAll();
+      final reloadedEvent = snapshot.events.first;
+      final resolved = snapshot.resolvedGuestsFor(reloadedEvent);
+
+      expect(resolved, hasLength(2));
+      final names = resolved.map((pair) => pair.$2.name).toSet();
+      expect(names, {'Alice Chen', 'Bob Smith'});
+    });
+
+    test('skips a guest whose person_id has no matching Person', () async {
+      // This shouldn't happen via normal saveEvent (which validates), but
+      // resolvedGuestsFor should still degrade gracefully rather than
+      // crashing on a stale/hand-edited snapshot.
+      final alice = await repo.people.create(name: 'Alice Chen');
+      var event = await repo.events.create(
+        name: 'Summer Picnic',
+        date: const SimpleDate(year: 2026, month: 8, day: 15),
+      );
+      event = event.copyWith(guests: [
+        Guest(personId: alice.id, rsvp: RsvpStatus.yes, invitedVia: InviteMethod.dm),
+      ]);
+      await repo.saveEvent(event);
+
+      final snapshot = await repo.loadAll();
+      final reloadedEvent = snapshot.events.first;
+      // Simulate a dangling reference without going through saveEvent's
+      // validation, to exercise resolvedGuestsFor's defensive skip.
+      final withGhost = reloadedEvent.copyWith(guests: [
+        ...reloadedEvent.guests,
+        Guest(personId: 'ghost', rsvp: RsvpStatus.no, invitedVia: InviteMethod.dm),
+      ]);
+
+      final resolved = snapshot.resolvedGuestsFor(withGhost);
+      expect(resolved, hasLength(1));
+      expect(resolved.first.$2.name, 'Alice Chen');
+    });
+  });
 }

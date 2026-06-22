@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/event.dart';
 import '../providers/data_providers.dart';
-import 'event_detail_screen_placeholder.dart';
+import 'event_detail_screen.dart';
 import 'widgets/event_card.dart';
 
 /// Everything not currently on the home screen: unpinned events, and
@@ -56,7 +56,7 @@ class _ArchiveBody extends StatelessWidget {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => EventDetailScreenPlaceholder(event: event),
+                  builder: (_) => EventDetailScreen(eventId: event.id),
                 ),
               );
             },

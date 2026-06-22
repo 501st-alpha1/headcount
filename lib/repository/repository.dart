@@ -72,6 +72,20 @@ class DataSnapshot {
     return result;
   }
 
+  /// All guests on [event], each paired with the Person they refer to.
+  /// Guests whose person_id has no matching Person are silently skipped
+  /// (this should never happen in practice — saveEvent rejects dangling
+  /// references — but a stale in-memory snapshot mid-edit shouldn't crash
+  /// the UI over it).
+  List<(Guest, Person)> resolvedGuestsFor(Event event) {
+    final result = <(Guest, Person)>[];
+    for (final guest in event.guests) {
+      final person = personById(guest.personId);
+      if (person != null) result.add((guest, person));
+    }
+    return result;
+  }
+
   /// All upcoming events with at least one guest needing follow-up,
   /// each paired with just those guest entries — the data behind the
   /// Global Follow-Up List screen.

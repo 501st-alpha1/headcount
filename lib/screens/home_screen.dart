@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/event.dart';
 import '../providers/data_providers.dart';
 import 'archive_screen.dart';
-import 'event_detail_screen_placeholder.dart';
+import 'event_detail_screen.dart';
 import 'event_editor_screen_placeholder.dart';
 import 'widgets/event_card.dart';
 
@@ -76,7 +76,7 @@ class _HomeBody extends StatelessWidget {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (_) => EventDetailScreenPlaceholder(event: event),
+                  builder: (_) => EventDetailScreen(eventId: event.id),
                 ),
               );
             },
