@@ -5,6 +5,7 @@ import 'providers/data_providers.dart';
 import 'screens/first_launch_screen.dart';
 import 'screens/home_screen_placeholder.dart';
 import 'services/app_settings.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,10 +35,10 @@ class HeadcountApp extends ConsumerWidget {
 
     return MaterialApp(
       title: 'Headcount',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-        useMaterial3: true,
-      ),
+      theme: buildLightTheme(),
+      darkTheme: buildDarkTheme(),
+      // No in-app toggle: follow whatever the OS is set to, light or dark.
+      themeMode: ThemeMode.system,
       home: dataDirectory == null
           ? const FirstLaunchScreen()
           : const HomeScreenPlaceholder(),
