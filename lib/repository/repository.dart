@@ -52,6 +52,26 @@ class DataSnapshot {
     return result;
   }
 
+  /// Events that currently belong on the home screen — pinned and either
+  /// upcoming or still within the post-event grace period — sorted by
+  /// date ascending (soonest first). See Event.showsOnHomeScreen for the
+  /// exact rule.
+  List<Event> get eventsOnHomeScreen {
+    final result = events.where((e) => e.showsOnHomeScreen).toList();
+    result.sort((a, b) => a.date.compareTo(b.date));
+    return result;
+  }
+
+  /// Everything that does NOT currently show on the home screen: unpinned
+  /// events, and pinned events whose grace period has expired. Sorted by
+  /// date descending (most recent first), since that's the more useful
+  /// order when scrolling back through history.
+  List<Event> get archivedEvents {
+    final result = events.where((e) => !e.showsOnHomeScreen).toList();
+    result.sort((a, b) => b.date.compareTo(a.date));
+    return result;
+  }
+
   /// All upcoming events with at least one guest needing follow-up,
   /// each paired with just those guest entries — the data behind the
   /// Global Follow-Up List screen.

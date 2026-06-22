@@ -369,4 +369,77 @@ void main() {
       expect(results.first.$1.name, 'Future Event');
     });
   });
+
+  group('DataSnapshot.eventsOnHomeScreen and archivedEvents', () {
+    test('eventsOnHomeScreen includes pinned upcoming events, sorted soonest first',
+        () async {
+      await repo.events.create(
+        name: 'Later',
+        date: const SimpleDate(year: 2099, month: 6, day: 1),
+      );
+      await repo.events.create(
+        name: 'Sooner',
+        date: const SimpleDate(year: 2099, month: 1, day: 1),
+      );
+
+      final snapshot = await repo.loadAll();
+      final home = snapshot.eventsOnHomeScreen;
+
+      expect(home, hasLength(2));
+      expect(home.first.name, 'Sooner');
+      expect(home.last.name, 'Later');
+    });
+
+    test('eventsOnHomeScreen excludes unpinned events', () async {
+      final event = await repo.events.create(
+        name: 'Unpinned',
+        date: const SimpleDate(year: 2099, month: 1, day: 1),
+        pinned: false,
+      );
+      await repo.saveEvent(event.copyWith(pinned: false));
+
+      final snapshot = await repo.loadAll();
+      expect(snapshot.eventsOnHomeScreen, isEmpty);
+      expect(snapshot.archivedEvents, hasLength(1));
+    });
+
+    test(
+        'eventsOnHomeScreen excludes pinned events past the grace period, '
+        'archivedEvents includes them',
+        () async {
+      final tenDaysAgo = DateTime.now().subtract(const Duration(days: 10));
+      final event = await repo.events.create(
+        name: 'Long Past',
+        date: SimpleDate(
+          year: tenDaysAgo.year,
+          month: tenDaysAgo.month,
+          day: tenDaysAgo.day,
+        ),
+      );
+
+      final snapshot = await repo.loadAll();
+      expect(snapshot.eventsOnHomeScreen, isEmpty);
+      expect(snapshot.archivedEvents.map((e) => e.id), contains(event.id));
+    });
+
+    test('archivedEvents is sorted most recent first', () async {
+      await repo.events.create(
+        name: 'Older',
+        date: const SimpleDate(year: 2000, month: 1, day: 1),
+        pinned: false,
+      );
+      await repo.events.create(
+        name: 'NewerButStillUnpinned',
+        date: const SimpleDate(year: 2010, month: 1, day: 1),
+        pinned: false,
+      );
+
+      final snapshot = await repo.loadAll();
+      final archive = snapshot.archivedEvents;
+
+      expect(archive, hasLength(2));
+      expect(archive.first.name, 'NewerButStillUnpinned');
+      expect(archive.last.name, 'Older');
+    });
+  });
 }

@@ -47,6 +47,15 @@ class SimpleDate implements Comparable<SimpleDate> {
   bool isBefore(SimpleDate other) => compareTo(other) < 0;
   bool isAfter(SimpleDate other) => compareTo(other) > 0;
 
+  /// Number of calendar days between this date and [other], positive if
+  /// [other] is after this date. Used for grace-period style logic (e.g.
+  /// "has it been more than 3 days since this event?").
+  int daysUntil(SimpleDate other) {
+    final thisAsDateTime = DateTime(year, month, day);
+    final otherAsDateTime = DateTime(other.year, other.month, other.day);
+    return otherAsDateTime.difference(thisAsDateTime).inDays;
+  }
+
   @override
   int compareTo(SimpleDate other) {
     if (year != other.year) return year.compareTo(other.year);

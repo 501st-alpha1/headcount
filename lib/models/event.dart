@@ -1,5 +1,6 @@
 import 'package:toml/toml.dart';
 
+import 'enums.dart';
 import 'guest.dart';
 import 'simple_date.dart';
 import 'toml_codec.dart';
@@ -44,6 +45,23 @@ class Event {
   /// True if this event's date is today or in the future.
   bool get isUpcoming => !date.isBefore(SimpleDate.today());
 
+  /// Number of days the home screen keeps showing a pinned event after
+  /// its date has passed, before it's treated as archived. This is a
+  /// grace period for "did everyone show up?" / final headcount glances
+  /// — not a setting, just a constant, so it's easy to find and tune.
+  static const int homeScreenGraceDays = 3;
+
+  /// True if this event should appear on the home screen right now.
+  /// This is computed from [pinned] and [date] rather than stored, so an
+  /// event automatically drops off the home screen a few days after it
+  /// happens without any write needing to happen — "pinned" in the file
+  /// just means "I want this visible up front," and time does the rest.
+  bool get showsOnHomeScreen {
+    if (!pinned) return false;
+    if (isUpcoming) return true;
+    return date.daysUntil(SimpleDate.today()) <= homeScreenGraceDays;
+  }
+
   /// Two-digit zero-padded month, e.g. "06".
   String get _monthSegment => date.month.toString().padLeft(2, '0');
 
@@ -60,6 +78,20 @@ class Event {
   List<Guest> get guestsNeedingFollowUp {
     final upcoming = isUpcoming;
     return guests.where((g) => g.needsFollowUp(upcoming)).toList();
+  }
+
+  /// Counts guests by RSVP status, e.g. for a home-screen summary like
+  /// "5 yes, 2 no response". Only statuses with at least one guest are
+  /// included, and iteration order follows RsvpStatus's declared order
+  /// (yes, softYes, maybe, softNo, no, declined, noResponse) so summaries
+  /// read consistently across events rather than in file order.
+  Map<RsvpStatus, int> get rsvpCounts {
+    final counts = <RsvpStatus, int>{};
+    for (final status in RsvpStatus.values) {
+      final count = guests.where((g) => g.rsvp == status).length;
+      if (count > 0) counts[status] = count;
+    }
+    return counts;
   }
 
   /// Returns the guest entry for [personId], or null if they're not on

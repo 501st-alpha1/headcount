@@ -363,4 +363,116 @@ void main() {
       expect(guest.needsFollowUp(true), isTrue);
     });
   });
+
+  group('Event.showsOnHomeScreen', () {
+    test('an upcoming pinned event shows on the home screen', () {
+      final event = Event(
+        id: 'future',
+        name: 'Future',
+        date: const SimpleDate(year: 2099, month: 1, day: 1),
+        pinned: true,
+      );
+      expect(event.showsOnHomeScreen, isTrue);
+    });
+
+    test('an upcoming unpinned event does not show on the home screen', () {
+      final event = Event(
+        id: 'future',
+        name: 'Future',
+        date: const SimpleDate(year: 2099, month: 1, day: 1),
+        pinned: false,
+      );
+      expect(event.showsOnHomeScreen, isFalse);
+    });
+
+    test('a pinned event still within the grace period shows on the home screen', () {
+      final today = SimpleDate.today();
+      // Walk back 2 days by constructing from DateTime, since SimpleDate
+      // has no subtraction operator of its own (by design — it's a thin
+      // value type, not a date-arithmetic library).
+      final dt = DateTime(today.year, today.month, today.day)
+          .subtract(const Duration(days: 2));
+      final event = Event(
+        id: 'recent',
+        name: 'Recent',
+        date: SimpleDate(year: dt.year, month: dt.month, day: dt.day),
+        pinned: true,
+      );
+      expect(event.showsOnHomeScreen, isTrue);
+    });
+
+    test('a pinned event past the grace period does not show on the home screen', () {
+      final today = SimpleDate.today();
+      final dt = DateTime(today.year, today.month, today.day)
+          .subtract(const Duration(days: 10));
+      final event = Event(
+        id: 'old',
+        name: 'Old',
+        date: SimpleDate(year: dt.year, month: dt.month, day: dt.day),
+        pinned: true,
+      );
+      expect(event.showsOnHomeScreen, isFalse);
+    });
+
+    test('an unpinned past event never shows regardless of grace period', () {
+      final event = Event(
+        id: 'old',
+        name: 'Old',
+        date: const SimpleDate(year: 2000, month: 1, day: 1),
+        pinned: false,
+      );
+      expect(event.showsOnHomeScreen, isFalse);
+    });
+  });
+
+  group('Event.rsvpCounts', () {
+    test('counts guests by status, omitting statuses with zero guests', () {
+      final event = Event(
+        id: 'e',
+        name: 'E',
+        date: const SimpleDate(year: 2026, month: 1, day: 1),
+        guests: [
+          Guest(personId: 'a', rsvp: RsvpStatus.yes, invitedVia: InviteMethod.dm),
+          Guest(personId: 'b', rsvp: RsvpStatus.yes, invitedVia: InviteMethod.dm),
+          Guest(
+            personId: 'c',
+            rsvp: RsvpStatus.noResponse,
+            invitedVia: InviteMethod.dm,
+          ),
+        ],
+      );
+      final counts = event.rsvpCounts;
+      expect(counts[RsvpStatus.yes], 2);
+      expect(counts[RsvpStatus.noResponse], 1);
+      expect(counts.containsKey(RsvpStatus.no), isFalse);
+    });
+
+    test('returns an empty map for an event with no guests', () {
+      final event = Event(
+        id: 'e',
+        name: 'E',
+        date: const SimpleDate(year: 2026, month: 1, day: 1),
+      );
+      expect(event.rsvpCounts, isEmpty);
+    });
+  });
+
+  group('SimpleDate.daysUntil', () {
+    test('is positive when other is later', () {
+      const earlier = SimpleDate(year: 2026, month: 1, day: 1);
+      const later = SimpleDate(year: 2026, month: 1, day: 4);
+      expect(earlier.daysUntil(later), 3);
+    });
+
+    test('is negative when other is earlier', () {
+      const earlier = SimpleDate(year: 2026, month: 1, day: 1);
+      const later = SimpleDate(year: 2026, month: 1, day: 4);
+      expect(later.daysUntil(earlier), -3);
+    });
+
+    test('is zero for the same date', () {
+      const date = SimpleDate(year: 2026, month: 1, day: 1);
+      expect(date.daysUntil(date), 0);
+    });
+  });
 }
