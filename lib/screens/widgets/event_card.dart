@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../models/enums.dart';
-import '../models/event.dart';
+import '../../models/enums.dart';
+import '../../models/event.dart';
 
 /// A tappable card summarizing one event: name, date, and an at-a-glance
 /// RSVP breakdown (e.g. "5 yes · 2 no response"). Used on both the home
