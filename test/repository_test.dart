@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:headcount/models/enums.dart';
 import 'package:headcount/models/guest.dart';
+import 'package:headcount/models/person.dart';
 import 'package:headcount/models/simple_date.dart';
 import 'package:headcount/repository/exceptions.dart';
 import 'package:headcount/repository/repository.dart';
@@ -65,6 +66,24 @@ void main() {
       await repo.people.create(name: 'Charlie Diaz');
       await repo.people.delete('charlie-diaz');
       expect(await File(repo.people.pathFor('charlie-diaz')).exists(), isFalse);
+    });
+
+    test('create() accepts interests directly', () async {
+      final person = await repo.people.create(
+        name: 'Alice Chen',
+        interests: [
+          const InterestTag(
+            tag: 'hiking',
+            level: InterestLevel.easyOnly,
+            notes: 'Bad knee',
+          ),
+        ],
+      );
+      expect(person.interests, hasLength(1));
+
+      final reloaded = await repo.people.load(person.id);
+      expect(reloaded!.interests.first.tag, 'hiking');
+      expect(reloaded.interests.first.level, InterestLevel.easyOnly);
     });
 
     test('delete() is a no-op for a nonexistent id', () async {

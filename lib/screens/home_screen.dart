@@ -7,6 +7,7 @@ import '../repository/load_result.dart';
 import 'archive_screen.dart';
 import 'event_detail_screen.dart';
 import 'event_editor_screen_placeholder.dart';
+import 'people_list_screen.dart';
 import 'widgets/event_card.dart';
 import 'widgets/load_issues_banner.dart';
 
@@ -24,6 +25,15 @@ class HomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Headcount'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.people_outline),
+            tooltip: 'People',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const PeopleListScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.archive_outlined),
             tooltip: 'Archive',

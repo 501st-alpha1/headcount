@@ -80,6 +80,7 @@ class PersonRepository {
     String? id,
     List<String> platforms = const [],
     String notes = '',
+    List<InterestTag> interests = const [],
   }) async {
     final existing = await _existingIds();
     final resolvedId = id ?? uniqueSlug(slugify(name), existing);
@@ -93,6 +94,7 @@ class PersonRepository {
       name: name,
       platforms: platforms,
       notes: notes,
+      interests: interests,
     );
     await save(person);
     return person;
