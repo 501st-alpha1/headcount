@@ -1,13 +1,15 @@
 import 'package:toml/toml.dart';
 
 import 'guest.dart';
+import 'simple_date.dart';
+import 'toml_codec.dart';
 
 /// An event you're tracking RSVPs for.
 /// Stored at events/<YYYY>/<MM>/<YYYY-MM-DD>-<id>.toml.
 class Event {
   final String id;
   final String name;
-  final DateTime date;
+  final SimpleDate date;
   final String description;
   final bool pinned;
   final List<Guest> guests;
@@ -24,7 +26,7 @@ class Event {
   Event copyWith({
     String? id,
     String? name,
-    DateTime? date,
+    SimpleDate? date,
     String? description,
     bool? pinned,
     List<Guest>? guests,
@@ -40,22 +42,13 @@ class Event {
   }
 
   /// True if this event's date is today or in the future.
-  bool get isUpcoming {
-    final today = DateTime.now();
-    final dateOnly = DateTime(date.year, date.month, date.day);
-    final todayOnly = DateTime(today.year, today.month, today.day);
-    return !dateOnly.isBefore(todayOnly);
-  }
+  bool get isUpcoming => !date.isBefore(SimpleDate.today());
 
   /// Two-digit zero-padded month, e.g. "06".
   String get _monthSegment => date.month.toString().padLeft(2, '0');
 
-  /// Two-digit zero-padded day, e.g. "05".
-  String get _daySegment => date.day.toString().padLeft(2, '0');
-
   /// The filename for this event, e.g. "2026-08-15-summer-picnic.toml".
-  String get filename =>
-      '${date.year}-$_monthSegment-$_daySegment-$id.toml';
+  String get filename => '${date.toIsoString()}-$id.toml';
 
   /// The relative path (from the data root) for this event's file, e.g.
   /// "events/2026/08/2026-08-15-summer-picnic.toml".
@@ -82,7 +75,7 @@ class Event {
     return {
       'id': id,
       'name': name,
-      'date': date,
+      'date': date.toTomlLocalDate(),
       'description': description,
       'pinned': pinned,
       'guests': guests.map((g) => g.toTomlMap()).toList(),
@@ -98,7 +91,7 @@ class Event {
     return Event(
       id: map['id'] as String,
       name: map['name'] as String,
-      date: map['date'] as DateTime,
+      date: readSimpleDate(map, 'date')!,
       description: (map['description'] as String?) ?? '',
       pinned: (map['pinned'] as bool?) ?? true,
       guests: rawGuests

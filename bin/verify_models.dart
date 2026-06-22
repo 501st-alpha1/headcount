@@ -12,6 +12,7 @@ import 'package:headcount/models/event.dart';
 import 'package:headcount/models/group.dart';
 import 'package:headcount/models/guest.dart';
 import 'package:headcount/models/person.dart';
+import 'package:headcount/models/simple_date.dart';
 import 'package:headcount/models/slug.dart';
 
 void main() {
@@ -32,6 +33,17 @@ void main() {
   check(
     'uniqueSlug collision',
     uniqueSlug('alice-chen', {'alice-chen'}) == 'alice-chen-2',
+  );
+
+  // --- SimpleDate ---
+  check(
+    'SimpleDate.parse round-trip',
+    SimpleDate.parse('2026-08-15').toIsoString() == '2026-08-15',
+  );
+  check(
+    'SimpleDate comparison',
+    const SimpleDate(year: 2026, month: 6, day: 10)
+        .isBefore(const SimpleDate(year: 2026, month: 8, day: 15)),
   );
 
   // --- Person round-trip ---
@@ -84,7 +96,7 @@ void main() {
   final event = Event(
     id: 'summer-picnic',
     name: 'Summer Picnic',
-    date: DateTime(2026, 8, 15),
+    date: const SimpleDate(year: 2026, month: 8, day: 15),
     description: 'Griffith Park, near the merry-go-round',
     pinned: true,
     guests: [
@@ -94,7 +106,7 @@ void main() {
         invitedVia: InviteMethod.dm,
         platform: 'Signal',
         followUpCount: 1,
-        lastFollowUp: DateTime(2026, 6, 10),
+        lastFollowUp: const SimpleDate(year: 2026, month: 6, day: 10),
         notes: 'Waiting to confirm with partner',
       ),
       Guest(
@@ -116,13 +128,15 @@ void main() {
 
   final eventToml = event.toTomlString();
   print('--- event.toml ---\n$eventToml');
+  check(
+    'event.toml date has no time/offset component',
+    eventToml.contains('date = 2026-08-15\n'),
+  );
   final eventParsed = Event.fromTomlString(eventToml);
   check('event id round-trip', eventParsed.id == event.id);
   check(
     'event date round-trip',
-    eventParsed.date.year == 2026 &&
-        eventParsed.date.month == 8 &&
-        eventParsed.date.day == 15,
+    eventParsed.date == const SimpleDate(year: 2026, month: 8, day: 15),
   );
   check('event guest count round-trip', eventParsed.guests.length == 2);
   check(
@@ -132,7 +146,7 @@ void main() {
   check(
     'event guest lastFollowUp round-trip',
     eventParsed.guestFor('alice-chen')?.lastFollowUp ==
-        DateTime(2026, 6, 10),
+        const SimpleDate(year: 2026, month: 6, day: 10),
   );
   check(
     'event guest with null lastFollowUp round-trip',

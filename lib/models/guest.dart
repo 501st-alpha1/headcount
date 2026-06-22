@@ -1,4 +1,6 @@
 import 'enums.dart';
+import 'simple_date.dart';
+import 'toml_codec.dart';
 
 /// A single guest's RSVP record within one event.
 /// Lives inside an Event's `guests` list — not a standalone file.
@@ -11,7 +13,7 @@ class Guest {
   final int followUpCount;
 
   /// Date of last follow-up attempt, or null if never followed up.
-  final DateTime? lastFollowUp;
+  final SimpleDate? lastFollowUp;
   final String notes;
 
   const Guest({
@@ -32,7 +34,7 @@ class Guest {
     InviteMethod? invitedVia,
     String? platform,
     int? followUpCount,
-    DateTime? lastFollowUp,
+    SimpleDate? lastFollowUp,
     bool clearLastFollowUp = false,
     String? notes,
   }) {
@@ -75,7 +77,8 @@ class Guest {
       'invited_via': invitedVia.tomlValue,
       'platform': platform,
       'follow_up_count': followUpCount,
-      if (lastFollowUp != null) 'last_follow_up': lastFollowUp,
+      if (lastFollowUp != null)
+        'last_follow_up': lastFollowUp!.toTomlLocalDate(),
       'notes': notes,
     };
   }
@@ -88,7 +91,7 @@ class Guest {
       invitedVia: InviteMethod.fromToml(map['invited_via'] as String),
       platform: (map['platform'] as String?) ?? '',
       followUpCount: (map['follow_up_count'] as int?) ?? 0,
-      lastFollowUp: map['last_follow_up'] as DateTime?,
+      lastFollowUp: readSimpleDate(map, 'last_follow_up', optional: true),
       notes: (map['notes'] as String?) ?? '',
     );
   }
