@@ -213,6 +213,28 @@ void main() {
       expect(updated.guestFor(alice.id)?.platform, 'Signal');
     });
 
+    test(
+        'newly invited guests do not immediately show as needing follow-up '
+        '(invitation counts as contact)', () async {
+      final alice = await repo.people.create(name: 'Alice Chen');
+      final group =
+          await repo.groups.create(name: 'Book Club', memberIds: [alice.id]);
+      final event = await repo.events.create(
+        name: 'Book Club Meeting',
+        date: const SimpleDate(year: 2099, month: 6, day: 1),
+      );
+
+      final updated = repo.inviteGroupToEvent(
+        event: event,
+        group: group,
+        invitedVia: InviteMethod.groupMessage,
+      );
+
+      final aliceGuest = updated.guestFor(alice.id)!;
+      expect(aliceGuest.lastFollowUp, SimpleDate.today());
+      expect(aliceGuest.needsFollowUp(true), isFalse);
+    });
+
     test('re-inviting the same group does not duplicate or clobber existing guests',
         () async {
       final alice = await repo.people.create(name: 'Alice Chen');

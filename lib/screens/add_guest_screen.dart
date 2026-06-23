@@ -6,6 +6,7 @@ import '../models/event.dart';
 import '../models/group.dart';
 import '../models/guest.dart';
 import '../models/person.dart';
+import '../models/simple_date.dart';
 import '../providers/data_providers.dart';
 import '../repository/repository.dart';
 
@@ -193,12 +194,16 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
 
   Future<void> _addPeopleByIds(Event event, Set<String> personIds) async {
     final existingIds = event.guests.map((g) => g.personId).toSet();
+    final today = SimpleDate.today();
     final newGuests = personIds
         .where((id) => !existingIds.contains(id))
         .map((id) => Guest(
               personId: id,
               rsvp: RsvpStatus.noResponse,
               invitedVia: InviteMethod.dm,
+              // Being added/invited counts as the first contact, so the
+              // follow-up cooldown starts now.
+              lastFollowUp: today,
             ))
         .toList();
 

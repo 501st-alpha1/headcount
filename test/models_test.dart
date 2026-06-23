@@ -289,7 +289,7 @@ void main() {
   });
 
   group('Guest.needsFollowUp', () {
-    test('no_response on an upcoming event needs follow-up', () {
+    test('no_response on an upcoming event with no contact yet needs follow-up', () {
       final guest = Guest(
         personId: 'p',
         rsvp: RsvpStatus.noResponse,
@@ -307,27 +307,74 @@ void main() {
       expect(guest.needsFollowUp(false), isFalse);
     });
 
-    test('soft_yes with zero follow-ups needs a follow-up', () {
+    test('soft_yes with no contact yet needs a follow-up', () {
       final guest = Guest(
         personId: 'p',
         rsvp: RsvpStatus.softYes,
         invitedVia: InviteMethod.dm,
-        followUpCount: 0,
       );
       expect(guest.needsFollowUp(true), isTrue);
     });
 
-    test('soft_yes after at least one follow-up does not need another', () {
+    test('soft_yes contacted today is within the cooldown and does not need another', () {
+      final today = SimpleDate.today();
       final guest = Guest(
         personId: 'p',
         rsvp: RsvpStatus.softYes,
         invitedVia: InviteMethod.dm,
         followUpCount: 1,
+        lastFollowUp: today,
       );
-      expect(guest.needsFollowUp(true), isFalse);
+      expect(guest.needsFollowUp(true, today: today), isFalse);
     });
 
-    test('a firm yes never needs follow-up', () {
+    test('no_response contacted today (e.g. just invited) does not need follow-up yet', () {
+      // This is the original reported bug: adding a guest should count as
+      // contact and start the cooldown, not show as needing follow-up
+      // immediately.
+      final today = SimpleDate.today();
+      final guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.noResponse,
+        invitedVia: InviteMethod.dm,
+        lastFollowUp: today,
+      );
+      expect(guest.needsFollowUp(true, today: today), isFalse);
+    });
+
+    test('contacted exactly at the cooldown boundary needs follow-up again', () {
+      const lastContact = SimpleDate(year: 2026, month: 1, day: 1);
+      final atBoundary = SimpleDate(
+        year: 2026,
+        month: 1,
+        day: 1 + Guest.followUpCooldownDays,
+      );
+      final guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.softYes,
+        invitedVia: InviteMethod.dm,
+        lastFollowUp: lastContact,
+      );
+      expect(guest.needsFollowUp(true, today: atBoundary), isTrue);
+    });
+
+    test('contacted one day before the cooldown boundary does not need follow-up yet', () {
+      const lastContact = SimpleDate(year: 2026, month: 1, day: 1);
+      final justBefore = SimpleDate(
+        year: 2026,
+        month: 1,
+        day: Guest.followUpCooldownDays, // one day short of the boundary
+      );
+      final guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.softYes,
+        invitedVia: InviteMethod.dm,
+        lastFollowUp: lastContact,
+      );
+      expect(guest.needsFollowUp(true, today: justBefore), isFalse);
+    });
+
+    test('a firm yes never needs follow-up regardless of contact history', () {
       final guest = Guest(
         personId: 'p',
         rsvp: RsvpStatus.yes,
@@ -354,13 +401,24 @@ void main() {
       expect(guest.needsFollowUp(true), isFalse);
     });
 
-    test('maybe on an upcoming event needs follow-up', () {
+    test('maybe on an upcoming event with no contact yet needs follow-up', () {
       final guest = Guest(
         personId: 'p',
         rsvp: RsvpStatus.maybe,
         invitedVia: InviteMethod.dm,
       );
       expect(guest.needsFollowUp(true), isTrue);
+    });
+
+    test('maybe contacted recently does not need follow-up yet', () {
+      final today = SimpleDate.today();
+      final guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.maybe,
+        invitedVia: InviteMethod.dm,
+        lastFollowUp: today,
+      );
+      expect(guest.needsFollowUp(true, today: today), isFalse);
     });
   });
 

@@ -3,6 +3,7 @@ import '../models/enums.dart';
 import '../models/group.dart';
 import '../models/guest.dart';
 import '../models/person.dart';
+import '../models/simple_date.dart';
 import 'event_repository.dart';
 import 'exceptions.dart';
 import 'group_repository.dart';
@@ -244,6 +245,7 @@ class Repository {
     String platform = '',
   }) {
     final existingIds = event.guests.map((g) => g.personId).toSet();
+    final today = SimpleDate.today();
     final newGuests = group.memberIds
         .where((id) => !existingIds.contains(id))
         .map((id) => Guest(
@@ -251,6 +253,10 @@ class Repository {
               rsvp: RsvpStatus.noResponse,
               invitedVia: invitedVia,
               platform: platform,
+              // Being invited counts as the first contact, so the
+              // follow-up cooldown starts now rather than showing this
+              // person as already overdue the moment they're added.
+              lastFollowUp: today,
             ))
         .toList();
 

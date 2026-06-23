@@ -12,9 +12,20 @@ class Guest {
   final String platform;
   final int followUpCount;
 
-  /// Date of last follow-up attempt, or null if never followed up.
+  /// Date of last contact — either the initial invite or an explicit
+  /// logged follow-up, whichever is most recent. Null means never
+  /// contacted at all (shouldn't normally happen in practice, since
+  /// adding a guest sets this immediately, but old hand-edited files
+  /// or pre-migration data may lack it).
   final SimpleDate? lastFollowUp;
   final String notes;
+
+  /// Days that must pass since [lastFollowUp] before a guest in an
+  /// unresolved RSVP state is considered due for another follow-up.
+  /// Prevents "needs follow-up" from firing again the moment you've
+  /// just invited or followed up with someone. Not yet user-configurable
+  /// — see needsFollowUp's doc comment.
+  static const int followUpCooldownDays = 5;
 
   const Guest({
     required this.personId,
@@ -51,22 +62,29 @@ class Guest {
     );
   }
 
-  /// Whether this guest likely needs a follow-up, per the rules in the
-  /// design doc: no_response/maybe with an upcoming event, or a soft
-  /// yes/no that's never been followed up on.
+  /// Whether this guest is currently due for a follow-up: the event is
+  /// upcoming, their RSVP is still unresolved (no_response, maybe, or a
+  /// soft yes/no), and at least [followUpCooldownDays] have passed since
+  /// they were last contacted (or they've never been contacted at all).
+  /// [today] defaults to the real current date; tests pass it explicitly
+  /// for deterministic cooldown checks.
   ///
   /// [eventIsUpcoming] is passed in by the caller (Event knows its own date;
   /// Guest doesn't store a reference back to its event).
-  bool needsFollowUp(bool eventIsUpcoming) {
+  bool needsFollowUp(bool eventIsUpcoming, {SimpleDate? today}) {
     if (!eventIsUpcoming) return false;
-    if (rsvp == RsvpStatus.noResponse || rsvp == RsvpStatus.maybe) {
-      return true;
-    }
-    if ((rsvp == RsvpStatus.softYes || rsvp == RsvpStatus.softNo) &&
-        followUpCount == 0) {
-      return true;
-    }
-    return false;
+
+    final isUnresolved = rsvp == RsvpStatus.noResponse ||
+        rsvp == RsvpStatus.maybe ||
+        rsvp == RsvpStatus.softYes ||
+        rsvp == RsvpStatus.softNo;
+    if (!isUnresolved) return false;
+
+    if (lastFollowUp == null) return true;
+
+    final effectiveToday = today ?? SimpleDate.today();
+    final daysSinceContact = lastFollowUp!.daysUntil(effectiveToday);
+    return daysSinceContact >= followUpCooldownDays;
   }
 
   Map<String, dynamic> toTomlMap() {
