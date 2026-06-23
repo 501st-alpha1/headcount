@@ -103,15 +103,13 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.isEditing) {
-      return _buildForm(context, null);
-    }
-
     final snapshotAsync = ref.watch(dataSnapshotProvider);
+
     return switch (snapshotAsync) {
       AsyncData(:final value) => _buildForm(
           context,
-          value.personById(widget.personId!),
+          widget.isEditing ? value.personById(widget.personId!) : null,
+          value.allTagsInUse,
         ),
       AsyncError(:final error) => Scaffold(
           appBar: AppBar(title: const Text('Edit Person')),
@@ -124,7 +122,11 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
     };
   }
 
-  Widget _buildForm(BuildContext context, Person? existing) {
+  Widget _buildForm(
+    BuildContext context,
+    Person? existing,
+    List<String> availableTags,
+  ) {
     if (widget.isEditing && existing == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Edit Person')),
@@ -209,6 +211,7 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
               for (final interest in _interests)
                 _EditableInterestRow(
                   interest: interest,
+                  availableTags: availableTags,
                   onChanged: (updated) => setState(() {
                     final index = _interests.indexOf(interest);
                     _interests[index] = updated;
@@ -234,11 +237,13 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
 
 class _EditableInterestRow extends StatefulWidget {
   final InterestTag interest;
+  final List<String> availableTags;
   final void Function(InterestTag) onChanged;
   final VoidCallback onRemove;
 
   const _EditableInterestRow({
     required this.interest,
+    required this.availableTags,
     required this.onChanged,
     required this.onRemove,
   });
@@ -248,34 +253,62 @@ class _EditableInterestRow extends StatefulWidget {
 }
 
 class _EditableInterestRowState extends State<_EditableInterestRow> {
-  late TextEditingController _tagController;
   late TextEditingController _notesController;
+
+  /// True while showing the inline "name your new tag" text field instead
+  /// of the "+" chip.
+  bool _creatingNewTag = false;
+  late TextEditingController _newTagController;
 
   @override
   void initState() {
     super.initState();
-    _tagController = TextEditingController(text: widget.interest.tag);
     _notesController = TextEditingController(text: widget.interest.notes);
+    _newTagController = TextEditingController();
   }
 
   @override
   void dispose() {
-    _tagController.dispose();
     _notesController.dispose();
+    _newTagController.dispose();
     super.dispose();
   }
 
-  void _emitChange() {
-    widget.onChanged(
-      widget.interest.copyWith(
-        tag: _tagController.text.trim(),
-        notes: _notesController.text.trim(),
-      ),
-    );
+  void _emitNotesChange() {
+    widget.onChanged(widget.interest.copyWith(notes: _notesController.text.trim()));
+  }
+
+  void _selectTag(String tag) {
+    widget.onChanged(widget.interest.copyWith(tag: tag));
+  }
+
+  void _startCreatingNewTag() {
+    setState(() {
+      _creatingNewTag = true;
+      _newTagController.clear();
+    });
+  }
+
+  void _confirmNewTag() {
+    final newTag = _newTagController.text.trim();
+    if (newTag.isNotEmpty) {
+      _selectTag(newTag);
+    }
+    setState(() => _creatingNewTag = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    // The current tag might not be in availableTags yet — e.g. it was
+    // just created on this row, or this row is being edited on a person
+    // who already had a tag no one else currently uses. Always include
+    // it so the selection is visible rather than silently unmatched.
+    final chipOptions = {
+      ...widget.availableTags,
+      if (widget.interest.tag.isNotEmpty) widget.interest.tag,
+    }.toList()
+      ..sort();
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -284,16 +317,47 @@ class _EditableInterestRowState extends State<_EditableInterestRow> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  child: TextField(
-                    controller: _tagController,
-                    decoration: const InputDecoration(
-                      labelText: 'Tag',
-                      hintText: 'hiking',
-                      isDense: true,
-                    ),
-                    onChanged: (_) => _emitChange(),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final tag in chipOptions)
+                        ChoiceChip(
+                          label: Text(tag),
+                          selected: widget.interest.tag == tag,
+                          onSelected: (_) => _selectTag(tag),
+                        ),
+                      if (_creatingNewTag)
+                        SizedBox(
+                          width: 140,
+                          child: TextField(
+                            controller: _newTagController,
+                            autofocus: true,
+                            decoration: const InputDecoration(
+                              hintText: 'New tag name',
+                              isDense: true,
+                              border: OutlineInputBorder(),
+                            ),
+                            onSubmitted: (_) => _confirmNewTag(),
+                          ),
+                        )
+                      else
+                        ActionChip(
+                          avatar: const Icon(Icons.add, size: 18),
+                          label: const Text('New'),
+                          onPressed: _startCreatingNewTag,
+                        ),
+                      if (_creatingNewTag)
+                        IconButton(
+                          icon: const Icon(Icons.check),
+                          tooltip: 'Confirm new tag',
+                          onPressed: _confirmNewTag,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                    ],
                   ),
                 ),
                 IconButton(
@@ -324,7 +388,7 @@ class _EditableInterestRowState extends State<_EditableInterestRow> {
                 hintText: 'Flat trails only',
                 isDense: true,
               ),
-              onChanged: (_) => _emitChange(),
+              onChanged: (_) => _emitNotesChange(),
             ),
           ],
         ),
