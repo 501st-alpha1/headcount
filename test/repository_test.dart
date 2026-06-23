@@ -359,7 +359,7 @@ void main() {
       event = event.copyWith(guests: [
         Guest(
           personId: alice.id,
-          rsvp: RsvpStatus.softYes,
+          rsvp: RsvpStatus.probably,
           invitedVia: InviteMethod.dm,
         ),
       ]);
@@ -370,7 +370,7 @@ void main() {
 
       expect(results, hasLength(1));
       expect(results.first.$1.id, 'summer-picnic');
-      expect(results.first.$2.rsvp, RsvpStatus.softYes);
+      expect(results.first.$2.rsvp, RsvpStatus.probably);
     });
 
     test('upcomingFollowUps only includes upcoming events with guests needing follow-up',

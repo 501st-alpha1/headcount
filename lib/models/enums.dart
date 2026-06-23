@@ -1,33 +1,36 @@
 /// RSVP status for a guest on a specific event.
 enum RsvpStatus {
   yes,
-  softYes,
+  probably,
   maybe,
-  softNo,
+  probablyNot,
   no,
-  declined,
   noResponse;
 
   /// The string used in TOML files. Kept stable even if enum names change.
   String get tomlValue => switch (this) {
         RsvpStatus.yes => 'yes',
-        RsvpStatus.softYes => 'soft_yes',
+        RsvpStatus.probably => 'probably',
         RsvpStatus.maybe => 'maybe',
-        RsvpStatus.softNo => 'soft_no',
+        RsvpStatus.probablyNot => 'probably_not',
         RsvpStatus.no => 'no',
-        RsvpStatus.declined => 'declined',
         RsvpStatus.noResponse => 'no_response',
       };
 
   static RsvpStatus fromToml(String value) {
     return switch (value) {
       'yes' => RsvpStatus.yes,
-      'soft_yes' => RsvpStatus.softYes,
+      'probably' => RsvpStatus.probably,
       'maybe' => RsvpStatus.maybe,
-      'soft_no' => RsvpStatus.softNo,
+      'probably_not' => RsvpStatus.probablyNot,
       'no' => RsvpStatus.no,
-      'declined' => RsvpStatus.declined,
       'no_response' => RsvpStatus.noResponse,
+      // Backward compatibility with files written before this status set
+      // changed: "soft_yes"/"soft_no" were renamed, and "declined" was
+      // merged into "no" (declined_reason still applies — see Guest).
+      'soft_yes' => RsvpStatus.probably,
+      'soft_no' => RsvpStatus.probablyNot,
+      'declined' => RsvpStatus.no,
       _ => throw FormatException('Unknown RSVP status: $value'),
     };
   }
@@ -35,11 +38,10 @@ enum RsvpStatus {
   /// Human-readable label for UI display.
   String get label => switch (this) {
         RsvpStatus.yes => 'Yes',
-        RsvpStatus.softYes => 'Soft yes',
+        RsvpStatus.probably => 'Probably',
         RsvpStatus.maybe => 'Maybe',
-        RsvpStatus.softNo => 'Soft no',
+        RsvpStatus.probablyNot => 'Probably not',
         RsvpStatus.no => 'No',
-        RsvpStatus.declined => 'Declined',
         RsvpStatus.noResponse => 'No response',
       };
 }

@@ -76,17 +76,19 @@ class _RsvpChip extends StatelessWidget {
     final scheme = theme.colorScheme;
     return switch (status) {
       RsvpStatus.yes => (scheme.primaryContainer, scheme.onPrimaryContainer),
-      RsvpStatus.softYes => (
+      RsvpStatus.probably => (
           scheme.primaryContainer.withValues(alpha: 0.5),
           scheme.onPrimaryContainer,
         ),
       RsvpStatus.maybe => (scheme.secondaryContainer, scheme.onSecondaryContainer),
-      RsvpStatus.softNo => (
+      RsvpStatus.probablyNot => (
           scheme.surfaceContainerHighest,
           scheme.onSurfaceVariant,
         ),
-      RsvpStatus.no => (scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
-      RsvpStatus.declined => (scheme.errorContainer, scheme.onErrorContainer),
+      // "no" absorbed the old "declined" status, including its more
+      // visually distinct error-container treatment — a firm no is worth
+      // standing out from the neutral no_response/probably_not gray.
+      RsvpStatus.no => (scheme.errorContainer, scheme.onErrorContainer),
       RsvpStatus.noResponse => (
           scheme.surfaceContainerHighest,
           scheme.onSurfaceVariant,

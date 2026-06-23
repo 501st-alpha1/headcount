@@ -83,7 +83,7 @@ class Event {
   /// Counts guests by RSVP status, e.g. for a home-screen summary like
   /// "5 yes, 2 no response". Only statuses with at least one guest are
   /// included, and iteration order follows RsvpStatus's declared order
-  /// (yes, softYes, maybe, softNo, no, declined, noResponse) so summaries
+  /// (yes, probably, maybe, probablyNot, no, noResponse) so summaries
   /// read consistently across events rather than in file order.
   Map<RsvpStatus, int> get rsvpCounts {
     final counts = <RsvpStatus, int>{};

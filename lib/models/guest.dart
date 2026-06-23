@@ -76,8 +76,8 @@ class Guest {
 
     final isUnresolved = rsvp == RsvpStatus.noResponse ||
         rsvp == RsvpStatus.maybe ||
-        rsvp == RsvpStatus.softYes ||
-        rsvp == RsvpStatus.softNo;
+        rsvp == RsvpStatus.probably ||
+        rsvp == RsvpStatus.probablyNot;
     if (!isUnresolved) return false;
 
     if (lastFollowUp == null) return true;

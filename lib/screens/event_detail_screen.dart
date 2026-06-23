@@ -18,11 +18,10 @@ enum _GuestFilter {
   all,
   needsFollowUp,
   yes,
-  softYes,
+  probably,
   maybe,
-  softNo,
+  probablyNot,
   no,
-  declined,
   noResponse,
 }
 
@@ -31,11 +30,10 @@ extension on _GuestFilter {
         _GuestFilter.all => 'All',
         _GuestFilter.needsFollowUp => 'Needs follow-up',
         _GuestFilter.yes => RsvpStatus.yes.label,
-        _GuestFilter.softYes => RsvpStatus.softYes.label,
+        _GuestFilter.probably => RsvpStatus.probably.label,
         _GuestFilter.maybe => RsvpStatus.maybe.label,
-        _GuestFilter.softNo => RsvpStatus.softNo.label,
+        _GuestFilter.probablyNot => RsvpStatus.probablyNot.label,
         _GuestFilter.no => RsvpStatus.no.label,
-        _GuestFilter.declined => RsvpStatus.declined.label,
         _GuestFilter.noResponse => RsvpStatus.noResponse.label,
       };
 }
@@ -172,16 +170,14 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
           .toList(),
       _GuestFilter.yes =>
         resolved.where((p) => p.$1.rsvp == RsvpStatus.yes).toList(),
-      _GuestFilter.softYes =>
-        resolved.where((p) => p.$1.rsvp == RsvpStatus.softYes).toList(),
+      _GuestFilter.probably =>
+        resolved.where((p) => p.$1.rsvp == RsvpStatus.probably).toList(),
       _GuestFilter.maybe =>
         resolved.where((p) => p.$1.rsvp == RsvpStatus.maybe).toList(),
-      _GuestFilter.softNo =>
-        resolved.where((p) => p.$1.rsvp == RsvpStatus.softNo).toList(),
+      _GuestFilter.probablyNot =>
+        resolved.where((p) => p.$1.rsvp == RsvpStatus.probablyNot).toList(),
       _GuestFilter.no =>
         resolved.where((p) => p.$1.rsvp == RsvpStatus.no).toList(),
-      _GuestFilter.declined =>
-        resolved.where((p) => p.$1.rsvp == RsvpStatus.declined).toList(),
       _GuestFilter.noResponse =>
         resolved.where((p) => p.$1.rsvp == RsvpStatus.noResponse).toList(),
     };

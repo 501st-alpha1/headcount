@@ -83,6 +83,40 @@ void main() {
     });
   });
 
+  group('RsvpStatus.fromToml', () {
+    test('parses current values', () {
+      expect(RsvpStatus.fromToml('yes'), RsvpStatus.yes);
+      expect(RsvpStatus.fromToml('probably'), RsvpStatus.probably);
+      expect(RsvpStatus.fromToml('maybe'), RsvpStatus.maybe);
+      expect(RsvpStatus.fromToml('probably_not'), RsvpStatus.probablyNot);
+      expect(RsvpStatus.fromToml('no'), RsvpStatus.no);
+      expect(RsvpStatus.fromToml('no_response'), RsvpStatus.noResponse);
+    });
+
+    test(
+        'parses old "soft_yes"/"soft_no"/"declined" values for backward '
+        'compatibility with files written before the status rename', () {
+      expect(RsvpStatus.fromToml('soft_yes'), RsvpStatus.probably);
+      expect(RsvpStatus.fromToml('soft_no'), RsvpStatus.probablyNot);
+      expect(RsvpStatus.fromToml('declined'), RsvpStatus.no);
+    });
+
+    test('rejects an unrecognized value', () {
+      expect(() => RsvpStatus.fromToml('nonsense'), throwsFormatException);
+    });
+
+    test('tomlValue never round-trips back to an old/removed value', () {
+      // Guards against accidentally reintroducing "soft_yes" etc. as the
+      // canonical written form — old values should only ever be read,
+      // never written.
+      for (final status in RsvpStatus.values) {
+        expect(status.tomlValue, isNot('soft_yes'));
+        expect(status.tomlValue, isNot('soft_no'));
+        expect(status.tomlValue, isNot('declined'));
+      }
+    });
+  });
+
   group('Person TOML round-trip', () {
     test('round-trips all fields including interests', () {
       final person = Person(
@@ -206,7 +240,7 @@ void main() {
         guests: [
           Guest(
             personId: 'alice-chen',
-            rsvp: RsvpStatus.softYes,
+            rsvp: RsvpStatus.probably,
             invitedVia: InviteMethod.dm,
             platform: 'Signal',
             followUpCount: 1,
@@ -231,7 +265,7 @@ void main() {
 
       final alice = parsed.guestFor('alice-chen');
       expect(alice, isNotNull);
-      expect(alice!.rsvp, RsvpStatus.softYes);
+      expect(alice!.rsvp, RsvpStatus.probably);
       expect(alice.lastFollowUp, const SimpleDate(year: 2026, month: 6, day: 10));
 
       final bob = parsed.guestFor('bob-smith');
@@ -256,6 +290,30 @@ void main() {
       // to throw because `null` was passed directly as a map value.
       expect(() => event.toTomlString(), returnsNormally);
       expect(event.toTomlString(), isNot(contains('last_follow_up')));
+    });
+
+    test(
+        'loads a hand-written/legacy file with rsvp = "declined" as '
+        'RsvpStatus.no', () {
+      const legacyToml = '''
+id = "e"
+name = "E"
+date = 2026-01-01
+
+[[guests]]
+person_id = "p"
+rsvp = "declined"
+declined_reason = "Out of town"
+invited_via = "dm"
+platform = ""
+follow_up_count = 0
+notes = ""
+''';
+      final event = Event.fromTomlString(legacyToml);
+      final guest = event.guestFor('p');
+      expect(guest, isNotNull);
+      expect(guest!.rsvp, RsvpStatus.no);
+      expect(guest.declinedReason, 'Out of town');
     });
   });
 
@@ -310,7 +368,7 @@ void main() {
     test('soft_yes with no contact yet needs a follow-up', () {
       final guest = Guest(
         personId: 'p',
-        rsvp: RsvpStatus.softYes,
+        rsvp: RsvpStatus.probably,
         invitedVia: InviteMethod.dm,
       );
       expect(guest.needsFollowUp(true), isTrue);
@@ -320,7 +378,7 @@ void main() {
       final today = SimpleDate.today();
       final guest = Guest(
         personId: 'p',
-        rsvp: RsvpStatus.softYes,
+        rsvp: RsvpStatus.probably,
         invitedVia: InviteMethod.dm,
         followUpCount: 1,
         lastFollowUp: today,
@@ -351,7 +409,7 @@ void main() {
       );
       final guest = Guest(
         personId: 'p',
-        rsvp: RsvpStatus.softYes,
+        rsvp: RsvpStatus.probably,
         invitedVia: InviteMethod.dm,
         lastFollowUp: lastContact,
       );
@@ -367,7 +425,7 @@ void main() {
       );
       final guest = Guest(
         personId: 'p',
-        rsvp: RsvpStatus.softYes,
+        rsvp: RsvpStatus.probably,
         invitedVia: InviteMethod.dm,
         lastFollowUp: lastContact,
       );
@@ -387,15 +445,6 @@ void main() {
       final guest = Guest(
         personId: 'p',
         rsvp: RsvpStatus.no,
-        invitedVia: InviteMethod.dm,
-      );
-      expect(guest.needsFollowUp(true), isFalse);
-    });
-
-    test('declined never needs follow-up', () {
-      final guest = Guest(
-        personId: 'p',
-        rsvp: RsvpStatus.declined,
         invitedVia: InviteMethod.dm,
       );
       expect(guest.needsFollowUp(true), isFalse);

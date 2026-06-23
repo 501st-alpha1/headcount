@@ -183,7 +183,7 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
               }).toList(),
             ),
 
-            if (_rsvp == RsvpStatus.declined) ...[
+            if (_rsvp == RsvpStatus.no) ...[
               const SizedBox(height: 16),
               TextField(
                 controller: _declinedReasonController,
