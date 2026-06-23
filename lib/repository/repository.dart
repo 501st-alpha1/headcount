@@ -4,11 +4,13 @@ import '../models/group.dart';
 import '../models/guest.dart';
 import '../models/person.dart';
 import '../models/simple_date.dart';
+import '../models/tag.dart';
 import 'event_repository.dart';
 import 'exceptions.dart';
 import 'group_repository.dart';
 import 'load_result.dart';
 import 'person_repository.dart';
+import 'tag_repository.dart';
 
 /// A snapshot of everything loaded from disk at once. Cross-entity
 /// in-memory queries (e.g. "what events is this person on") work off this,
@@ -17,12 +19,14 @@ class DataSnapshot {
   final List<Person> people;
   final List<Group> groups;
   final List<Event> events;
+  final List<Tag> tags;
   final List<LoadIssue> issues;
 
   const DataSnapshot({
     required this.people,
     required this.groups,
     required this.events,
+    required this.tags,
     required this.issues,
   });
 
@@ -38,6 +42,13 @@ class DataSnapshot {
   Group? groupById(String id) {
     for (final group in groups) {
       if (group.id == id) return group;
+    }
+    return null;
+  }
+
+  Tag? tagById(String id) {
+    for (final tag in tags) {
+      if (tag.id == id) return tag;
     }
     return null;
   }
@@ -74,31 +85,40 @@ class DataSnapshot {
   }
 
   /// All distinct interest tags currently in use across every person,
-  /// sorted alphabetically. This is the basis for tag autocomplete/search —
-  /// there's no separate tag registry file (see the design doc), so this
-  /// is computed fresh from people/ each time.
-  List<String> get allTagsInUse {
-    final tags = <String>{};
-    for (final person in people) {
-      for (final interest in person.interests) {
-        if (interest.tag.isNotEmpty) tags.add(interest.tag);
-      }
-    }
-    final sorted = tags.toList()..sort();
+  /// sorted alphabetically by name. Every tag in use is expected to have
+  /// a corresponding Tag definition by the time a snapshot is built —
+  /// Repository.loadAll auto-creates one for any that's missing — so this
+  /// reads from [tags] rather than re-scanning people's raw interest
+  /// strings.
+  List<Tag> get allTagsInUse {
+    final sorted = [...tags]..sort((a, b) => a.name.compareTo(b.name));
     return sorted;
   }
 
-  /// All people with an interest tag matching [tagName] (case-sensitive,
-  /// exact match — tag values are normalized by the editor UI, not here),
-  /// each paired with their InterestTag for that tag so callers can sort/
-  /// group by level. Sorted by InterestLevel.sortRank (enthusiastic first).
-  List<(Person, InterestTag)> peopleWithTag(String tagName) {
+  /// All people with an interest tag matching [tagId] (matched against
+  /// InterestTag.tag, which stores a Tag's id), each paired with their
+  /// InterestTag for that tag. Sorted by position in the tag's own
+  /// levels list (index 0 = most enthusiastic); a person whose stored
+  /// level string isn't found in the tag's current levels (e.g. a level
+  /// was deleted without reassigning them, or hand-edited data) sorts
+  /// last, after every recognized level.
+  List<(Person, InterestTag)> peopleWithTag(String tagId) {
+    final tag = tagById(tagId);
+    final levelRank = <String, int>{
+      if (tag != null)
+        for (var i = 0; i < tag.levels.length; i++) tag.levels[i]: i,
+    };
+
     final result = <(Person, InterestTag)>[];
     for (final person in people) {
-      final interest = person.interestIn(tagName);
+      final interest = person.interestIn(tagId);
       if (interest != null) result.add((person, interest));
     }
-    result.sort((a, b) => a.$2.level.sortRank.compareTo(b.$2.level.sortRank));
+    result.sort((a, b) {
+      final rankA = levelRank[a.$2.level] ?? levelRank.length;
+      final rankB = levelRank[b.$2.level] ?? levelRank.length;
+      return rankA.compareTo(rankB);
+    });
     return result;
   }
 
@@ -130,39 +150,191 @@ class DataSnapshot {
   }
 }
 
-/// Top-level entry point for all data access. Composes the three
+/// Top-level entry point for all data access. Composes the four
 /// per-entity repositories and owns the logic that spans more than one
-/// of them: dangling-reference checks, group-invite snapshotting, and
-/// safe deletion.
+/// of them: dangling-reference checks, group-invite snapshotting, safe
+/// deletion, and tag-definition migration/maintenance.
 class Repository {
   final String dataRoot;
   final PersonRepository people;
   final GroupRepository groups;
   final EventRepository events;
+  final TagRepository tags;
 
   Repository(this.dataRoot)
       : people = PersonRepository(dataRoot),
         groups = GroupRepository(dataRoot),
-        events = EventRepository(dataRoot);
+        events = EventRepository(dataRoot),
+        tags = TagRepository(dataRoot);
 
-  /// Loads people, groups, and events in one pass. Issues from all three
-  /// are merged into a single list so the UI can show one combined
-  /// "N files couldn't be read" notice rather than three.
+  /// Loads people, groups, events, and tags in one pass. Issues from all
+  /// of them are merged into a single list so the UI can show one
+  /// combined "N files couldn't be read" notice rather than several.
+  ///
+  /// Also runs tag auto-migration: any tag string in use on a person's
+  /// interests that doesn't yet have a tags/<id>.toml definition gets
+  /// one created on the spot, seeded with Tag.defaultLevels. This is
+  /// what makes the per-tag-custom-levels feature land safely on
+  /// existing data — every tag that was previously just a free string
+  /// gets a real definition the first time the app loads after this
+  /// feature ships, with no separate migration step for the user to run.
   Future<DataSnapshot> loadAll() async {
     final peopleResult = await people.loadAll();
     final groupsResult = await groups.loadAll();
     final eventsResult = await events.loadAll();
+    final tagsResult = await tags.loadAll();
+
+    final tagList = await _ensureTagDefinitionsExist(
+      people: peopleResult.items,
+      existingTags: tagsResult.items,
+    );
 
     return DataSnapshot(
       people: peopleResult.items,
       groups: groupsResult.items,
       events: eventsResult.items,
+      tags: tagList,
       issues: [
         ...peopleResult.issues,
         ...groupsResult.issues,
         ...eventsResult.issues,
+        ...tagsResult.issues,
       ],
     );
+  }
+
+  /// Scans [people] for every tag id in use, creates a Tag file (seeded
+  /// with Tag.defaultLevels) for any that aren't already present in
+  /// [existingTags], and returns the combined, up-to-date tag list.
+  /// Writes happen here (not just in-memory) so this only needs to run
+  /// once per tag — the next loadAll() will find it already present.
+  Future<List<Tag>> _ensureTagDefinitionsExist({
+    required List<Person> people,
+    required List<Tag> existingTags,
+  }) async {
+    final existingIds = existingTags.map((t) => t.id).toSet();
+    final tagIdsInUse = <String>{};
+    for (final person in people) {
+      for (final interest in person.interests) {
+        if (interest.tag.isNotEmpty) tagIdsInUse.add(interest.tag);
+      }
+    }
+
+    final missingIds = tagIdsInUse.difference(existingIds);
+    if (missingIds.isEmpty) return existingTags;
+
+    final created = <Tag>[];
+    for (final id in missingIds) {
+      // The tag id IS the display name at this point, since tags were
+      // previously just free strings with no separate name field — the
+      // Tag Editor lets the user rename for display later if they want
+      // something prettier than the raw tag string.
+      final tag = Tag(id: id, name: id, levels: Tag.defaultLevels);
+      await tags.save(tag);
+      created.add(tag);
+    }
+
+    return [...existingTags, ...created];
+  }
+
+  /// Saves [tag] directly, with no validation — used for simple edits
+  /// (renaming the tag's display name) that don't touch the levels list.
+  /// For changes to levels themselves, use renameTagLevel/deleteTagLevel,
+  /// which also keep every person's interest entries consistent.
+  Future<void> saveTag(Tag tag) async {
+    await tags.save(tag);
+  }
+
+  /// Renames a level within [tag] from [oldLevel] to [newLevel],
+  /// updating the tag's own levels list AND every person currently using
+  /// [oldLevel] on this tag, so nothing is left referencing a name that
+  /// no longer exists. This is the only path for renaming a level —
+  /// there's no way to rename just the tag's list without the cascade,
+  /// since that would silently orphan everyone using the old name.
+  Future<void> renameTagLevel({
+    required Tag tag,
+    required String oldLevel,
+    required String newLevel,
+  }) async {
+    final updatedLevels =
+        tag.levels.map((l) => l == oldLevel ? newLevel : l).toList();
+    await tags.save(tag.copyWith(levels: updatedLevels));
+
+    final peopleResult = await people.loadAll();
+    for (final person in peopleResult.items) {
+      var changed = false;
+      final updatedInterests = person.interests.map((interest) {
+        if (interest.tag == tag.id && interest.level == oldLevel) {
+          changed = true;
+          return interest.copyWith(level: newLevel);
+        }
+        return interest;
+      }).toList();
+      if (changed) {
+        await people.save(person.copyWith(interests: updatedInterests));
+      }
+    }
+  }
+
+  /// Everyone currently at [level] on [tag] — the list shown to the user
+  /// before deleting a level, so they know who needs reassigning.
+  Future<List<Person>> peopleAtTagLevel(Tag tag, String level) async {
+    final peopleResult = await people.loadAll();
+    return peopleResult.items
+        .where((p) => p.interestIn(tag.id)?.level == level)
+        .toList();
+  }
+
+  /// Deletes [levelToDelete] from [tag], reassigning everyone currently
+  /// at that level to [reassignTo] first. [reassignTo] must be a
+  /// different level still present in [tag] after the deletion — pass
+  /// one of [tag]'s other levels (see peopleAtTagLevel to show the user
+  /// who's affected before calling this, and let them pick where those
+  /// people land).
+  Future<void> deleteTagLevel({
+    required Tag tag,
+    required String levelToDelete,
+    required String reassignTo,
+  }) async {
+    if (reassignTo == levelToDelete) {
+      throw ArgumentError(
+        'reassignTo ("$reassignTo") must differ from the level being deleted.',
+      );
+    }
+    if (!tag.levels.contains(reassignTo)) {
+      throw ArgumentError(
+        'reassignTo ("$reassignTo") is not one of this tag\'s levels.',
+      );
+    }
+
+    final updatedLevels =
+        tag.levels.where((l) => l != levelToDelete).toList();
+    await tags.save(tag.copyWith(levels: updatedLevels));
+
+    final affected = await peopleAtTagLevel(tag, levelToDelete);
+    for (final person in affected) {
+      final updatedInterests = person.interests.map((interest) {
+        if (interest.tag == tag.id && interest.level == levelToDelete) {
+          return interest.copyWith(level: reassignTo);
+        }
+        return interest;
+      }).toList();
+      await people.save(person.copyWith(interests: updatedInterests));
+    }
+  }
+
+  /// Deletes a tag entirely, removing the matching InterestTag entry
+  /// from every person who has it (rather than leaving a dangling
+  /// reference to a tag definition that no longer exists).
+  Future<void> deleteTag(String tagId) async {
+    final peopleResult = await people.loadAll();
+    for (final person in peopleResult.items) {
+      if (person.interestIn(tagId) == null) continue;
+      final updatedInterests =
+          person.interests.where((i) => i.tag != tagId).toList();
+      await people.save(person.copyWith(interests: updatedInterests));
+    }
+    await tags.delete(tagId);
   }
 
   /// Saves [event], validating that every guest's person_id corresponds

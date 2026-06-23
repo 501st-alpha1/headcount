@@ -1,12 +1,18 @@
 import 'package:toml/toml.dart';
 
-import 'enums.dart';
-
-/// A single interest tag on a person: what they're into, how much,
-/// and any free-text context (e.g. "bad knee, flat trails only").
+/// A single interest tag on a person: what they're into, how much, and
+/// any free-text context (e.g. "bad knee, flat trails only").
+///
+/// [level] is a free string rather than a fixed enum, since levels are
+/// now defined per-tag (see Tag) — "easy only" is meaningful for hiking
+/// but not for board games, so there's no longer one global vocabulary.
+/// This class doesn't validate that [level] is one of the owning Tag's
+/// currently defined levels; that check happens where a Tag is available
+/// to check against (see Repository), since InterestTag alone has no way
+/// to look up its tag's definition.
 class InterestTag {
   final String tag;
-  final InterestLevel level;
+  final String level;
   final String notes;
 
   const InterestTag({
@@ -17,7 +23,7 @@ class InterestTag {
 
   InterestTag copyWith({
     String? tag,
-    InterestLevel? level,
+    String? level,
     String? notes,
   }) {
     return InterestTag(
@@ -30,7 +36,7 @@ class InterestTag {
   Map<String, dynamic> toTomlMap() {
     return {
       'tag': tag,
-      'level': level.tomlValue,
+      'level': level,
       'notes': notes,
     };
   }
@@ -38,7 +44,7 @@ class InterestTag {
   factory InterestTag.fromTomlMap(Map<String, dynamic> map) {
     return InterestTag(
       tag: map['tag'] as String,
-      level: InterestLevel.fromToml(map['level'] as String),
+      level: map['level'] as String,
       notes: (map['notes'] as String?) ?? '',
     );
   }
