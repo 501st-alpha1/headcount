@@ -191,45 +191,44 @@ void main() {
   });
 
   group('Repository.inviteGroupToEvent', () {
-    test('adds all group members as no_response guests', () async {
+    test('adds all group members as no_response guests, using the group\'s '
+        'own default platform', () async {
       final alice = await repo.people.create(name: 'Alice Chen');
       final bob = await repo.people.create(name: 'Bob Smith');
-      final group =
-          await repo.groups.create(name: 'Book Club', memberIds: [alice.id, bob.id]);
+      final group = await repo.groups.create(
+        name: 'Book Club',
+        memberIds: [alice.id, bob.id],
+        defaultPlatform: 'Signal',
+      );
       final event = await repo.events.create(
         name: 'Book Club Meeting',
         date: const SimpleDate(year: 2026, month: 6, day: 1),
       );
 
-      final updated = repo.inviteGroupToEvent(
-        event: event,
-        group: group,
-        invitedVia: InviteMethod.groupMessage,
-        platform: 'Signal',
-      );
+      final updated = repo.inviteGroupToEvent(event: event, group: group);
 
       expect(updated.guests, hasLength(2));
       expect(updated.guestFor(alice.id)?.rsvp, RsvpStatus.noResponse);
       expect(updated.guestFor(alice.id)?.invitedVia, InviteMethod.groupMessage);
       expect(updated.guestFor(alice.id)?.platform, 'Signal');
+      expect(updated.guestFor(bob.id)?.platform, 'Signal');
     });
 
     test(
         'newly invited guests do not immediately show as needing follow-up '
         '(invitation counts as contact)', () async {
       final alice = await repo.people.create(name: 'Alice Chen');
-      final group =
-          await repo.groups.create(name: 'Book Club', memberIds: [alice.id]);
+      final group = await repo.groups.create(
+        name: 'Book Club',
+        memberIds: [alice.id],
+        defaultPlatform: 'Signal',
+      );
       final event = await repo.events.create(
         name: 'Book Club Meeting',
         date: const SimpleDate(year: 2099, month: 6, day: 1),
       );
 
-      final updated = repo.inviteGroupToEvent(
-        event: event,
-        group: group,
-        invitedVia: InviteMethod.groupMessage,
-      );
+      final updated = repo.inviteGroupToEvent(event: event, group: group);
 
       final aliceGuest = updated.guestFor(alice.id)!;
       expect(aliceGuest.lastFollowUp, SimpleDate.today());
@@ -240,29 +239,24 @@ void main() {
         () async {
       final alice = await repo.people.create(name: 'Alice Chen');
       final bob = await repo.people.create(name: 'Bob Smith');
-      final group =
-          await repo.groups.create(name: 'Book Club', memberIds: [alice.id, bob.id]);
+      final group = await repo.groups.create(
+        name: 'Book Club',
+        memberIds: [alice.id, bob.id],
+        defaultPlatform: 'Signal',
+      );
       var event = await repo.events.create(
         name: 'Book Club Meeting',
         date: const SimpleDate(year: 2026, month: 6, day: 1),
       );
 
-      event = repo.inviteGroupToEvent(
-        event: event,
-        group: group,
-        invitedVia: InviteMethod.groupMessage,
-      );
+      event = repo.inviteGroupToEvent(event: event, group: group);
       // Simulate the user having since recorded Alice's RSVP.
       final aliceConfirmed = event.guestFor(alice.id)!.copyWith(rsvp: RsvpStatus.yes);
       event = event.copyWith(
         guests: event.guests.map((g) => g.personId == alice.id ? aliceConfirmed : g).toList(),
       );
 
-      final reInvited = repo.inviteGroupToEvent(
-        event: event,
-        group: group,
-        invitedVia: InviteMethod.groupMessage,
-      );
+      final reInvited = repo.inviteGroupToEvent(event: event, group: group);
 
       expect(reInvited.guests, hasLength(2));
       expect(reInvited.guestFor(alice.id)?.rsvp, RsvpStatus.yes,
@@ -273,17 +267,16 @@ void main() {
         () async {
       final alice = await repo.people.create(name: 'Alice Chen');
       final bob = await repo.people.create(name: 'Bob Smith');
-      var group =
-          await repo.groups.create(name: 'Book Club', memberIds: [alice.id, bob.id]);
+      var group = await repo.groups.create(
+        name: 'Book Club',
+        memberIds: [alice.id, bob.id],
+        defaultPlatform: 'Signal',
+      );
       var event = await repo.events.create(
         name: 'Book Club Meeting',
         date: const SimpleDate(year: 2026, month: 6, day: 1),
       );
-      event = repo.inviteGroupToEvent(
-        event: event,
-        group: group,
-        invitedVia: InviteMethod.groupMessage,
-      );
+      event = repo.inviteGroupToEvent(event: event, group: group);
       await repo.saveEvent(event);
 
       // Now remove bob from the group.
@@ -294,6 +287,25 @@ void main() {
       final reloaded = await repo.events.load(event.id);
       expect(reloaded!.guests, hasLength(2));
       expect(reloaded.guestFor(bob.id), isNotNull);
+    });
+
+    test('a group with no default platform set produces guests with an '
+        'empty platform rather than crashing (model-level fallback; the '
+        'editor UI is what actually enforces this is required)', () async {
+      final alice = await repo.people.create(name: 'Alice Chen');
+      final group = await repo.groups.create(
+        name: 'No Platform Group',
+        memberIds: [alice.id],
+      );
+      final event = await repo.events.create(
+        name: 'Some Event',
+        date: const SimpleDate(year: 2026, month: 6, day: 1),
+      );
+
+      final updated = repo.inviteGroupToEvent(event: event, group: group);
+
+      expect(updated.guestFor(alice.id)?.platform, '');
+      expect(updated.guestFor(alice.id)?.invitedVia, InviteMethod.groupMessage);
     });
   });
 
@@ -534,6 +546,47 @@ void main() {
       final resolved = snapshot.resolvedGuestsFor(withGhost);
       expect(resolved, hasLength(1));
       expect(resolved.first.$2.name, 'Alice Chen');
+    });
+  });
+
+  group('DataSnapshot.allPlatformsInUse', () {
+    test('collects distinct platforms from people, sorted alphabetically',
+        () async {
+      await repo.people.create(
+        name: 'Alice Chen',
+        platforms: ['Signal', 'Instagram'],
+      );
+      await repo.people.create(
+        name: 'Bob Smith',
+        platforms: ['Signal'],
+      );
+
+      final snapshot = await repo.loadAll();
+      expect(snapshot.allPlatformsInUse, ['Instagram', 'Signal']);
+    });
+
+    test('includes a group\'s default platform even if no person uses it yet',
+        () async {
+      await repo.groups.create(name: 'Book Club', defaultPlatform: 'Discord');
+
+      final snapshot = await repo.loadAll();
+      expect(snapshot.allPlatformsInUse, contains('Discord'));
+    });
+
+    test('returns an empty list when nothing has any platform set',
+        () async {
+      await repo.people.create(name: 'Alice Chen');
+      final snapshot = await repo.loadAll();
+      expect(snapshot.allPlatformsInUse, isEmpty);
+    });
+
+    test('does not duplicate a platform used by both a person and a group\'s default',
+        () async {
+      await repo.people.create(name: 'Alice Chen', platforms: ['Signal']);
+      await repo.groups.create(name: 'Book Club', defaultPlatform: 'Signal');
+
+      final snapshot = await repo.loadAll();
+      expect(snapshot.allPlatformsInUse, ['Signal']);
     });
   });
 

@@ -95,6 +95,26 @@ class DataSnapshot {
     return sorted;
   }
 
+  /// All distinct platform names currently in use, sorted alphabetically.
+  /// Scanned live from both people's platforms and groups' default
+  /// platforms — there's no separate platform registry file, same as
+  /// tags. A platform only ever set as a group's default (with no person
+  /// using it yet) still shows up here, since that's a real, intentional
+  /// use of the platform name even before any person has it.
+  List<String> get allPlatformsInUse {
+    final platforms = <String>{};
+    for (final person in people) {
+      platforms.addAll(person.platforms);
+    }
+    for (final group in groups) {
+      if (group.defaultPlatform.isNotEmpty) {
+        platforms.add(group.defaultPlatform);
+      }
+    }
+    final sorted = platforms.toList()..sort();
+    return sorted;
+  }
+
   /// All people with an interest tag matching [tagId] (matched against
   /// InterestTag.tag, which stores a Tag's id), each paired with their
   /// InterestTag for that tag. Sorted by position in the tag's own
@@ -399,13 +419,15 @@ class Repository {
     await people.delete(personId);
   }
 
-  /// Bulk-adds every member of [group] to [event] as new guests, using
-  /// the given [invitedVia]/[platform] defaults for all of them. This is
-  /// the snapshot behavior described in the design doc: membership is
-  /// copied once, with no ongoing link to the group afterward. People
-  /// already on the event's guest list (matched by person_id) are
-  /// skipped — re-inviting a group never duplicates or clobbers existing
-  /// RSVP state.
+  /// Bulk-adds every member of [group] to [event] as new guests. Always
+  /// uses invited_via = group_message with the group's own
+  /// [Group.defaultPlatform] — there's no reason to invite "via this
+  /// group" through any other method, so this isn't a caller-supplied
+  /// parameter the way it used to be. This is the snapshot behavior
+  /// described in the design doc: membership is copied once, with no
+  /// ongoing link to the group afterward. People already on the event's
+  /// guest list (matched by person_id) are skipped — re-inviting a group
+  /// never duplicates or clobbers existing RSVP state.
   ///
   /// Returns the updated Event (caller is responsible for persisting it
   /// via saveEvent, so this stays a pure in-memory operation that's easy
@@ -413,8 +435,6 @@ class Repository {
   Event inviteGroupToEvent({
     required Event event,
     required Group group,
-    required InviteMethod invitedVia,
-    String platform = '',
   }) {
     final existingIds = event.guests.map((g) => g.personId).toSet();
     final today = SimpleDate.today();
@@ -423,8 +443,8 @@ class Repository {
         .map((id) => Guest(
               personId: id,
               rsvp: RsvpStatus.noResponse,
-              invitedVia: invitedVia,
-              platform: platform,
+              invitedVia: InviteMethod.groupMessage,
+              platform: group.defaultPlatform,
               // Being invited counts as the first contact, so the
               // follow-up cooldown starts now rather than showing this
               // person as already overdue the moment they're added.

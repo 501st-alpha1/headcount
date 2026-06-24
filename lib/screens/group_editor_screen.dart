@@ -5,6 +5,7 @@ import '../models/group.dart';
 import '../models/person.dart';
 import '../providers/data_providers.dart';
 import '../repository/repository.dart';
+import 'widgets/platform_chip_picker.dart';
 
 /// Create-or-edit form for a Group: name, notes, and membership. When
 /// [groupId] is null this creates a new group; when supplied, it loads
@@ -28,6 +29,8 @@ class _GroupEditorScreenState extends ConsumerState<GroupEditorScreen> {
   final _memberSearchController = TextEditingController();
   String _memberQuery = '';
   Set<String> _memberIds = {};
+  String? _defaultPlatform;
+  bool _showPlatformError = false;
   bool _isSaving = false;
   bool _isInitialized = false;
 
@@ -51,6 +54,8 @@ class _GroupEditorScreenState extends ConsumerState<GroupEditorScreen> {
     _nameController.text = group.name;
     _notesController.text = group.notes;
     _memberIds = group.memberIds.toSet();
+    _defaultPlatform =
+        group.defaultPlatform.isEmpty ? null : group.defaultPlatform;
     _isInitialized = true;
   }
 
@@ -59,6 +64,10 @@ class _GroupEditorScreenState extends ConsumerState<GroupEditorScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Name is required')),
       );
+      return;
+    }
+    if (_defaultPlatform == null || _defaultPlatform!.isEmpty) {
+      setState(() => _showPlatformError = true);
       return;
     }
 
@@ -74,6 +83,7 @@ class _GroupEditorScreenState extends ConsumerState<GroupEditorScreen> {
           name: _nameController.text.trim(),
           notes: _notesController.text.trim(),
           memberIds: _memberIds.toList(),
+          defaultPlatform: _defaultPlatform,
         );
         await repository.saveGroup(updated);
       } else {
@@ -81,6 +91,7 @@ class _GroupEditorScreenState extends ConsumerState<GroupEditorScreen> {
           name: _nameController.text.trim(),
           notes: _notesController.text.trim(),
           memberIds: _memberIds.toList(),
+          defaultPlatform: _defaultPlatform!,
         );
       }
       await ref.read(dataSnapshotProvider.notifier).reload();
@@ -105,6 +116,7 @@ class _GroupEditorScreenState extends ConsumerState<GroupEditorScreen> {
           context,
           widget.isEditing ? value.groupById(widget.groupId!) : null,
           value.people,
+          value.allPlatformsInUse,
         ),
       AsyncError(:final error) => Scaffold(
           appBar: AppBar(title: const Text('Edit Group')),
@@ -121,6 +133,7 @@ class _GroupEditorScreenState extends ConsumerState<GroupEditorScreen> {
     BuildContext context,
     Group? existing,
     List<Person> allPeople,
+    List<String> availablePlatforms,
   ) {
     if (widget.isEditing && existing == null) {
       return Scaffold(
@@ -174,6 +187,34 @@ class _GroupEditorScreenState extends ConsumerState<GroupEditorScreen> {
               alignLabelWithHint: true,
             ),
           ),
+          const SizedBox(height: 24),
+          Text(
+            'Default platform',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Used automatically when you invite this group to an event.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          PlatformChipPicker(
+            availablePlatforms: availablePlatforms,
+            selected: _defaultPlatform == null ? {} : {_defaultPlatform!},
+            multiSelect: false,
+            onChanged: (updated) => setState(() {
+              _defaultPlatform = updated.isEmpty ? null : updated.first;
+              _showPlatformError = false;
+            }),
+          ),
+          if (_showPlatformError)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Pick a default platform before saving.',
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
           const SizedBox(height: 24),
           Row(
             children: [

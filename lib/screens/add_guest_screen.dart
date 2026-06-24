@@ -182,7 +182,6 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
     final updated = repository.inviteGroupToEvent(
       event: event,
       group: group,
-      invitedVia: InviteMethod.groupMessage,
     );
     await repository.saveEvent(updated);
     await ref.read(dataSnapshotProvider.notifier).reload();

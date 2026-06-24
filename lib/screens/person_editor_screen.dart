@@ -5,6 +5,7 @@ import '../models/person.dart';
 import '../models/tag.dart';
 import '../providers/data_providers.dart';
 import '../repository/repository.dart';
+import 'widgets/platform_chip_picker.dart';
 
 /// Create-or-edit form for a Person. When [personId] is null this creates
 /// a new person; when supplied, it loads and edits the existing one.
@@ -25,8 +26,8 @@ class PersonEditorScreen extends ConsumerStatefulWidget {
 class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
-  late TextEditingController _platformsController;
   late TextEditingController _notesController;
+  Set<String> _platforms = {};
   List<InterestTag> _interests = [];
   bool _isSaving = false;
   bool _isInitialized = false;
@@ -35,14 +36,12 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController();
-    _platformsController = TextEditingController();
     _notesController = TextEditingController();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _platformsController.dispose();
     _notesController.dispose();
     super.dispose();
   }
@@ -50,17 +49,11 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
   void _initializeFrom(Person person) {
     if (_isInitialized) return;
     _nameController.text = person.name;
-    _platformsController.text = person.platforms.join(', ');
+    _platforms = person.platforms.toSet();
     _notesController.text = person.notes;
     _interests = [...person.interests];
     _isInitialized = true;
   }
-
-  List<String> get _platformsList => _platformsController.text
-      .split(',')
-      .map((p) => p.trim())
-      .where((p) => p.isNotEmpty)
-      .toList();
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
@@ -76,7 +69,7 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
         }
         final updated = existing.copyWith(
           name: _nameController.text.trim(),
-          platforms: _platformsList,
+          platforms: _platforms.toList(),
           notes: _notesController.text.trim(),
           interests: _interests,
         );
@@ -84,7 +77,7 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
       } else {
         await repository.people.create(
           name: _nameController.text.trim(),
-          platforms: _platformsList,
+          platforms: _platforms.toList(),
           notes: _notesController.text.trim(),
           interests: _interests,
         );
@@ -111,6 +104,7 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
           context,
           widget.isEditing ? value.personById(widget.personId!) : null,
           value.allTagsInUse,
+          value.allPlatformsInUse,
         ),
       AsyncError(:final error) => Scaffold(
           appBar: AppBar(title: const Text('Edit Person')),
@@ -127,6 +121,7 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
     BuildContext context,
     Person? existing,
     List<Tag> availableTags,
+    List<String> availablePlatforms,
   ) {
     if (widget.isEditing && existing == null) {
       return Scaffold(
@@ -166,13 +161,12 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
               autofocus: !widget.isEditing,
             ),
             const SizedBox(height: 16),
-            TextFormField(
-              controller: _platformsController,
-              decoration: const InputDecoration(
-                labelText: 'Platforms (comma-separated)',
-                hintText: 'Signal, Instagram',
-                border: OutlineInputBorder(),
-              ),
+            Text('Platforms', style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 8),
+            PlatformChipPicker(
+              availablePlatforms: availablePlatforms,
+              selected: _platforms,
+              onChanged: (updated) => setState(() => _platforms = updated),
             ),
             const SizedBox(height: 16),
             TextFormField(

@@ -65,12 +65,16 @@ class GroupRepository {
   }
 
   /// Creates a new group, generating a unique id from [name] if [id]
-  /// isn't supplied.
+  /// isn't supplied. [defaultPlatform] is conceptually required (every
+  /// group needs one for group-invite to work correctly), but this layer
+  /// doesn't enforce that — UI-level validation does, same as everywhere
+  /// else in this app.
   Future<Group> create({
     required String name,
     String? id,
     List<String> memberIds = const [],
     String notes = '',
+    String defaultPlatform = '',
   }) async {
     final existing = await _existingIds();
     final resolvedId = id ?? uniqueSlug(slugify(name), existing);
@@ -84,6 +88,7 @@ class GroupRepository {
       name: name,
       memberIds: memberIds,
       notes: notes,
+      defaultPlatform: defaultPlatform,
     );
     await save(group);
     return group;

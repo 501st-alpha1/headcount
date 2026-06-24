@@ -228,24 +228,39 @@ void main() {
   });
 
   group('Group TOML round-trip', () {
-    test('round-trips member_ids and notes', () {
+    test('round-trips member_ids, notes, and defaultPlatform', () {
       final group = Group(
         id: 'book-club',
         name: 'Book Club',
         memberIds: ['alice-chen', 'bob-smith'],
         notes: 'Meets monthly',
+        defaultPlatform: 'Signal',
       );
       final parsed = Group.fromTomlString(group.toTomlString());
       expect(parsed.id, group.id);
       expect(parsed.name, group.name);
       expect(parsed.memberIds, group.memberIds);
       expect(parsed.notes, group.notes);
+      expect(parsed.defaultPlatform, 'Signal');
     });
 
     test('round-trips an empty member list', () {
       final group = Group(id: 'empty-group', name: 'Empty Group');
       final parsed = Group.fromTomlString(group.toTomlString());
       expect(parsed.memberIds, isEmpty);
+    });
+
+    test(
+        'loads a legacy file with no default_platform key as an empty '
+        'string rather than crashing', () {
+      const legacyToml = '''
+id = "book-club"
+name = "Book Club"
+member_ids = ["alice-chen"]
+notes = ""
+''';
+      final parsed = Group.fromTomlString(legacyToml);
+      expect(parsed.defaultPlatform, '');
     });
   });
 

@@ -13,11 +13,18 @@ class Group {
   final List<String> memberIds;
   final String notes;
 
+  /// The platform used by default when inviting this group to an event
+  /// (e.g. "Signal", "Instagram"). Required — every group needs one, since
+  /// inviting via a group always implies invited_via = group_message on
+  /// some specific platform. See Repository.inviteGroupToEvent.
+  final String defaultPlatform;
+
   const Group({
     required this.id,
     required this.name,
     this.memberIds = const [],
     this.notes = '',
+    this.defaultPlatform = '',
   });
 
   Group copyWith({
@@ -25,12 +32,14 @@ class Group {
     String? name,
     List<String>? memberIds,
     String? notes,
+    String? defaultPlatform,
   }) {
     return Group(
       id: id ?? this.id,
       name: name ?? this.name,
       memberIds: memberIds ?? this.memberIds,
       notes: notes ?? this.notes,
+      defaultPlatform: defaultPlatform ?? this.defaultPlatform,
     );
   }
 
@@ -40,6 +49,7 @@ class Group {
       'name': name,
       'member_ids': memberIds,
       'notes': notes,
+      'default_platform': defaultPlatform,
     };
   }
 
@@ -55,6 +65,11 @@ class Group {
           .map((m) => m as String)
           .toList(),
       notes: (map['notes'] as String?) ?? '',
+      // Optional on read for backward compatibility with group files
+      // written before this field existed — they'll show up with an
+      // empty default platform, which the UI treats as "needs to be set"
+      // rather than crashing on a missing key.
+      defaultPlatform: (map['default_platform'] as String?) ?? '',
     );
   }
 
