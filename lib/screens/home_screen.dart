@@ -7,12 +7,13 @@ import '../repository/load_result.dart';
 import 'archive_screen.dart';
 import 'event_detail_screen.dart';
 import 'event_editor_screen.dart';
+import 'groups_list_screen.dart';
 import 'people_list_screen.dart';
 import 'tags_list_screen.dart';
 import 'widgets/event_card.dart';
 import 'widgets/load_issues_banner.dart';
 
-enum _HomeMenuAction { people, tags, archive }
+enum _HomeMenuAction { people, groups, tags, archive }
 
 /// The app's home screen: pinned events (upcoming, or recently past and
 /// still within the grace period), soonest first, with a way to reach
@@ -32,6 +33,7 @@ class HomeScreen extends ConsumerWidget {
             onSelected: (action) {
               final screen = switch (action) {
                 _HomeMenuAction.people => const PeopleListScreen(),
+                _HomeMenuAction.groups => const GroupsListScreen(),
                 _HomeMenuAction.tags => const TagsListScreen(),
                 _HomeMenuAction.archive => const ArchiveScreen(),
               };
@@ -45,6 +47,13 @@ class HomeScreen extends ConsumerWidget {
                 child: ListTile(
                   leading: Icon(Icons.people_outline),
                   title: Text('People'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _HomeMenuAction.groups,
+                child: ListTile(
+                  leading: Icon(Icons.groups_outlined),
+                  title: Text('Groups'),
                 ),
               ),
               PopupMenuItem(
