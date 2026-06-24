@@ -5,6 +5,7 @@ import 'package:headcount/models/guest.dart';
 import 'package:headcount/models/person.dart';
 import 'package:headcount/models/simple_date.dart';
 import 'package:headcount/models/slug.dart';
+import 'package:headcount/models/tag.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -125,9 +126,9 @@ void main() {
         platforms: ['Signal', 'Instagram'],
         notes: 'Busy Sundays.',
         interests: [
-          InterestTag(
+          const InterestTag(
             tag: 'hiking',
-            level: InterestLevel.easyOnly,
+            level: 'easy_only',
             notes: 'Bad knee, flat trails only',
           ),
         ],
@@ -141,7 +142,7 @@ void main() {
       expect(parsed.notes, person.notes);
       expect(parsed.interests, hasLength(1));
       expect(parsed.interests.first.tag, 'hiking');
-      expect(parsed.interests.first.level, InterestLevel.easyOnly);
+      expect(parsed.interests.first.level, 'easy_only');
       expect(parsed.interests.first.notes, 'Bad knee, flat trails only');
     });
 
@@ -158,11 +159,71 @@ void main() {
         id: 'alice-chen',
         name: 'Alice Chen',
         interests: [
-          InterestTag(tag: 'hiking', level: InterestLevel.lovesIt),
+          const InterestTag(tag: 'hiking', level: 'loves_it'),
         ],
       );
-      expect(person.interestIn('hiking')?.level, InterestLevel.lovesIt);
+      expect(person.interestIn('hiking')?.level, 'loves_it');
       expect(person.interestIn('board_games'), isNull);
+    });
+
+    test('a tag can have any free-string level, since levels are now '
+        'defined per-tag rather than from a fixed enum', () {
+      final person = Person(
+        id: 'alice-chen',
+        name: 'Alice Chen',
+        interests: [
+          const InterestTag(tag: 'board_games', level: 'will_play_anything'),
+        ],
+      );
+      final parsed = Person.fromTomlString(person.toTomlString());
+      expect(parsed.interestIn('board_games')?.level, 'will_play_anything');
+    });
+  });
+
+  group('Tag TOML round-trip', () {
+    test('round-trips id, name, and levels in order', () {
+      const tag = Tag(
+        id: 'hiking',
+        name: 'Hiking',
+        levels: ['loves_it', 'easy_only', 'needs_convincing', 'not_interested'],
+      );
+      final parsed = Tag.fromTomlString(tag.toTomlString());
+      expect(parsed.id, 'hiking');
+      expect(parsed.name, 'Hiking');
+      expect(parsed.levels, [
+        'loves_it',
+        'easy_only',
+        'needs_convincing',
+        'not_interested',
+      ]);
+    });
+
+    test('round-trips an empty levels list', () {
+      const tag = Tag(id: 'mystery', name: 'Mystery');
+      final parsed = Tag.fromTomlString(tag.toTomlString());
+      expect(parsed.levels, isEmpty);
+    });
+
+    test('defaultLevels matches the old InterestLevel enum\'s TOML values, '
+        'so auto-migrated tags line up exactly with existing person data',
+        () {
+      expect(Tag.defaultLevels, [
+        'loves_it',
+        'easy_only',
+        'needs_convincing',
+        'not_interested',
+      ]);
+    });
+
+    test('levels preserve order through a round-trip (order is the rank)',
+        () {
+      const tag = Tag(
+        id: 'board_games',
+        name: 'Board Games',
+        levels: ['will_play_anything', 'casual_only', 'pass'],
+      );
+      final parsed = Tag.fromTomlString(tag.toTomlString());
+      expect(parsed.levels, ['will_play_anything', 'casual_only', 'pass']);
     });
   });
 

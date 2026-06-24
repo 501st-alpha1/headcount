@@ -8,12 +8,15 @@ import 'archive_screen.dart';
 import 'event_detail_screen.dart';
 import 'event_editor_screen.dart';
 import 'people_list_screen.dart';
+import 'tags_list_screen.dart';
 import 'widgets/event_card.dart';
 import 'widgets/load_issues_banner.dart';
 
+enum _HomeMenuAction { people, tags, archive }
+
 /// The app's home screen: pinned events (upcoming, or recently past and
 /// still within the grace period), soonest first, with a way to reach
-/// everything else via the archive.
+/// everything else via the overflow menu.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -25,23 +28,40 @@ class HomeScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Headcount'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.people_outline),
-            tooltip: 'People',
-            onPressed: () {
+          PopupMenuButton<_HomeMenuAction>(
+            onSelected: (action) {
+              final screen = switch (action) {
+                _HomeMenuAction.people => const PeopleListScreen(),
+                _HomeMenuAction.tags => const TagsListScreen(),
+                _HomeMenuAction.archive => const ArchiveScreen(),
+              };
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const PeopleListScreen()),
+                MaterialPageRoute(builder: (_) => screen),
               );
             },
-          ),
-          IconButton(
-            icon: const Icon(Icons.archive_outlined),
-            tooltip: 'Archive',
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ArchiveScreen()),
-              );
-            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: _HomeMenuAction.people,
+                child: ListTile(
+                  leading: Icon(Icons.people_outline),
+                  title: Text('People'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _HomeMenuAction.tags,
+                child: ListTile(
+                  leading: Icon(Icons.interests_outlined),
+                  title: Text('Tags'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _HomeMenuAction.archive,
+                child: ListTile(
+                  leading: Icon(Icons.archive_outlined),
+                  title: Text('Archive'),
+                ),
+              ),
+            ],
           ),
         ],
       ),

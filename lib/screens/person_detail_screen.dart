@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/enums.dart';
 import '../models/event.dart';
 import '../models/guest.dart';
 import '../models/person.dart';
+import '../models/tag.dart';
 import '../providers/data_providers.dart';
 import '../repository/repository.dart';
 import 'event_detail_screen.dart';
@@ -92,7 +92,10 @@ class PersonDetailScreen extends ConsumerWidget {
             for (final interest in person.interests)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: _InterestRow(interest: interest),
+                child: _InterestRow(
+                  interest: interest,
+                  tag: snapshot.tagById(interest.tag),
+                ),
               ),
             const SizedBox(height: 20),
           ],
@@ -146,12 +149,19 @@ class _SectionLabel extends StatelessWidget {
 
 class _InterestRow extends StatelessWidget {
   final InterestTag interest;
+  final Tag? tag;
 
-  const _InterestRow({required this.interest});
+  const _InterestRow({required this.interest, required this.tag});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Falls back to the raw stored tag id if no Tag definition is found
+    // (shouldn't normally happen — Repository.loadAll auto-creates a
+    // definition for every tag in use — but a mid-edit stale snapshot
+    // shouldn't crash the display over it).
+    final displayName = tag?.name ?? interest.tag;
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -162,7 +172,7 @@ class _InterestRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
-            interest.tag,
+            displayName,
             style: theme.textTheme.labelSmall?.copyWith(
               color: theme.colorScheme.onSecondaryContainer,
             ),
@@ -173,7 +183,7 @@ class _InterestRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(interest.level.label, style: theme.textTheme.bodyMedium),
+              Text(interest.level, style: theme.textTheme.bodyMedium),
               if (interest.notes.isNotEmpty)
                 Text(
                   interest.notes,

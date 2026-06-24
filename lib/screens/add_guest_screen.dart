@@ -7,6 +7,7 @@ import '../models/group.dart';
 import '../models/guest.dart';
 import '../models/person.dart';
 import '../models/simple_date.dart';
+import '../models/tag.dart';
 import '../providers/data_providers.dart';
 import '../repository/repository.dart';
 
@@ -34,7 +35,7 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
 
   /// When non-null, we're showing the interest-level browser for this
   /// tag instead of the main search results.
-  String? _browsingTag;
+  Tag? _browsingTag;
 
   @override
   void dispose() {
@@ -48,7 +49,7 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_browsingTag == null ? 'Add Guest' : _browsingTag!),
+        title: Text(_browsingTag == null ? 'Add Guest' : _browsingTag!.name),
         leading: _browsingTag == null
             ? null
             : BackButton(onPressed: () => setState(() => _browsingTag = null)),
@@ -120,7 +121,7 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
       ..sort((a, b) => a.name.compareTo(b.name));
 
     final matchingTags = snapshot.allTagsInUse
-        .where((t) => query.isEmpty || t.toLowerCase().contains(query))
+        .where((t) => query.isEmpty || t.name.toLowerCase().contains(query))
         .toList();
 
     if (matchingPeople.isEmpty && matchingGroups.isEmpty && matchingTags.isEmpty) {
@@ -139,9 +140,9 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
           for (final tag in matchingTags)
             ListTile(
               leading: const Icon(Icons.interests_outlined),
-              title: Text(tag),
+              title: Text(tag.name),
               subtitle: Text(
-                '${snapshot.peopleWithTag(tag).length} people',
+                '${snapshot.peopleWithTag(tag.id).length} people',
               ),
               onTap: () => setState(() => _browsingTag = tag),
             ),
@@ -241,11 +242,17 @@ class _ResultSectionHeader extends StatelessWidget {
 }
 
 /// Shown when a tag result is tapped: everyone with that interest tag,
-/// grouped by level (enthusiastic first), with not_interested hidden by
-/// default. Multi-select via checkboxes, then "Add Selected" applies them
-/// all to the event at once.
+/// grouped by level in the tag's own defined order (most enthusiastic
+/// first, per Tag.levels — see Tag's doc comment). Multi-select via
+/// checkboxes, then "Add Selected" applies them all to the event at once.
+///
+/// Note: levels are now per-tag free strings rather than a fixed enum,
+/// so there's no longer a universal "not interested" value to hide by
+/// default the way the old InterestLevel.notInterested did — everyone
+/// with the tag is shown, just grouped with the tag's own least-
+/// enthusiastic levels last.
 class _TagInterestBrowser extends StatefulWidget {
-  final String tag;
+  final Tag tag;
   final DataSnapshot snapshot;
   final Event event;
   final void Function(Set<String> personIds) onAddSelected;
@@ -263,33 +270,24 @@ class _TagInterestBrowser extends StatefulWidget {
 
 class _TagInterestBrowserState extends State<_TagInterestBrowser> {
   final Set<String> _selected = {};
-  bool _showNotInterested = false;
 
   @override
   Widget build(BuildContext context) {
     final existingIds = widget.event.guests.map((g) => g.personId).toSet();
-    final allMatches = widget.snapshot.peopleWithTag(widget.tag);
-    final available = allMatches.where((p) => !existingIds.contains(p.$1.id));
-
-    final visible = available
-        .where((p) =>
-            _showNotInterested || p.$2.level != InterestLevel.notInterested)
-        .toList();
-
-    final hiddenCount = available
-        .where((p) => p.$2.level == InterestLevel.notInterested)
-        .length;
+    final allMatches = widget.snapshot.peopleWithTag(widget.tag.id);
+    final available =
+        allMatches.where((p) => !existingIds.contains(p.$1.id)).toList();
 
     return Column(
       children: [
         Expanded(
-          child: visible.isEmpty
+          child: available.isEmpty
               ? const Center(child: Text('No one left to add.'))
               : ListView(
                   children: [
-                    for (final group in _groupByLevel(visible))
+                    for (final group in _groupByLevel(available))
                       ...[
-                        _ResultSectionHeader(label: group.$1.label),
+                        _ResultSectionHeader(label: group.$1),
                         for (final pair in group.$2)
                           CheckboxListTile(
                             title: Text(pair.$1.name),
@@ -306,14 +304,6 @@ class _TagInterestBrowserState extends State<_TagInterestBrowser> {
                             }),
                           ),
                       ],
-                    if (!_showNotInterested && hiddenCount > 0)
-                      TextButton(
-                        onPressed: () =>
-                            setState(() => _showNotInterested = true),
-                        child: Text(
-                          'Show $hiddenCount not interested',
-                        ),
-                      ),
                   ],
                 ),
         ),
@@ -334,14 +324,23 @@ class _TagInterestBrowserState extends State<_TagInterestBrowser> {
     );
   }
 
-  List<(InterestLevel, List<(Person, InterestTag)>)> _groupByLevel(
+  /// Groups by level following widget.tag.levels' order; anyone whose
+  /// stored level string isn't one of the tag's currently defined levels
+  /// (stale/hand-edited data, or a level deleted without reassignment in
+  /// some edge case) lands in a final "Other" group rather than being
+  /// silently dropped.
+  List<(String, List<(Person, InterestTag)>)> _groupByLevel(
     List<(Person, InterestTag)> people,
   ) {
-    final groups = <(InterestLevel, List<(Person, InterestTag)>)>[];
-    for (final level in InterestLevel.values) {
+    final groups = <(String, List<(Person, InterestTag)>)>[];
+    for (final level in widget.tag.levels) {
       final inGroup = people.where((p) => p.$2.level == level).toList();
       if (inGroup.isNotEmpty) groups.add((level, inGroup));
     }
+    final other = people
+        .where((p) => !widget.tag.levels.contains(p.$2.level))
+        .toList();
+    if (other.isNotEmpty) groups.add(('Other', other));
     return groups;
   }
 }

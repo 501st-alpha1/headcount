@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/enums.dart';
 import '../models/person.dart';
+import '../models/tag.dart';
 import '../providers/data_providers.dart';
+import '../repository/repository.dart';
 
 /// Create-or-edit form for a Person. When [personId] is null this creates
 /// a new person; when supplied, it loads and edits the existing one.
@@ -125,7 +126,7 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
   Widget _buildForm(
     BuildContext context,
     Person? existing,
-    List<String> availableTags,
+    List<Tag> availableTags,
   ) {
     if (widget.isEditing && existing == null) {
       return Scaffold(
@@ -228,16 +229,14 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
 
   void _addInterest() {
     setState(() {
-      _interests.add(
-        const InterestTag(tag: '', level: InterestLevel.lovesIt),
-      );
+      _interests.add(const InterestTag(tag: '', level: ''));
     });
   }
 }
 
-class _EditableInterestRow extends StatefulWidget {
+class _EditableInterestRow extends ConsumerStatefulWidget {
   final InterestTag interest;
-  final List<String> availableTags;
+  final List<Tag> availableTags;
   final void Function(InterestTag) onChanged;
   final VoidCallback onRemove;
 
@@ -249,15 +248,17 @@ class _EditableInterestRow extends StatefulWidget {
   });
 
   @override
-  State<_EditableInterestRow> createState() => _EditableInterestRowState();
+  ConsumerState<_EditableInterestRow> createState() =>
+      _EditableInterestRowState();
 }
 
-class _EditableInterestRowState extends State<_EditableInterestRow> {
+class _EditableInterestRowState extends ConsumerState<_EditableInterestRow> {
   late TextEditingController _notesController;
 
   /// True while showing the inline "name your new tag" text field instead
   /// of the "+" chip.
   bool _creatingNewTag = false;
+  bool _isCreatingTag = false;
   late TextEditingController _newTagController;
 
   @override
@@ -278,8 +279,13 @@ class _EditableInterestRowState extends State<_EditableInterestRow> {
     widget.onChanged(widget.interest.copyWith(notes: _notesController.text.trim()));
   }
 
-  void _selectTag(String tag) {
-    widget.onChanged(widget.interest.copyWith(tag: tag));
+  /// Selecting a different tag clears the current level, since a level
+  /// from the old tag is almost certainly meaningless on the new one
+  /// (that's the whole point of per-tag levels).
+  void _selectTag(Tag tag) {
+    widget.onChanged(
+      widget.interest.copyWith(tag: tag.id, level: ''),
+    );
   }
 
   void _startCreatingNewTag() {
@@ -289,25 +295,49 @@ class _EditableInterestRowState extends State<_EditableInterestRow> {
     });
   }
 
-  void _confirmNewTag() {
-    final newTag = _newTagController.text.trim();
-    if (newTag.isNotEmpty) {
-      _selectTag(newTag);
+  Future<void> _confirmNewTag() async {
+    final newTagName = _newTagController.text.trim();
+    if (newTagName.isEmpty) {
+      setState(() => _creatingNewTag = false);
+      return;
     }
-    setState(() => _creatingNewTag = false);
+
+    setState(() => _isCreatingTag = true);
+    try {
+      final repository = ref.read(repositoryProvider);
+      final tag = await repository.tags.create(name: newTagName);
+      await ref.read(dataSnapshotProvider.notifier).reload();
+      _selectTag(tag);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not create tag: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _creatingNewTag = false;
+          _isCreatingTag = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // The current tag might not be in availableTags yet — e.g. it was
-    // just created on this row, or this row is being edited on a person
-    // who already had a tag no one else currently uses. Always include
-    // it so the selection is visible rather than silently unmatched.
+    // The current tag might not be in availableTags yet — e.g. a stale
+    // in-memory list right after creating one. Always include it so the
+    // selection is visible rather than silently unmatched.
+    final selectedTag = widget.interest.tag.isEmpty
+        ? null
+        : _findTagById(widget.availableTags, widget.interest.tag);
+
     final chipOptions = {
       ...widget.availableTags,
-      if (widget.interest.tag.isNotEmpty) widget.interest.tag,
+      if (selectedTag != null) selectedTag,
     }.toList()
-      ..sort();
+      ..sort((a, b) => a.name.compareTo(b.name));
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -326,8 +356,8 @@ class _EditableInterestRowState extends State<_EditableInterestRow> {
                     children: [
                       for (final tag in chipOptions)
                         ChoiceChip(
-                          label: Text(tag),
-                          selected: widget.interest.tag == tag,
+                          label: Text(tag.name),
+                          selected: widget.interest.tag == tag.id,
                           onSelected: (_) => _selectTag(tag),
                         ),
                       if (_creatingNewTag)
@@ -336,6 +366,7 @@ class _EditableInterestRowState extends State<_EditableInterestRow> {
                           child: TextField(
                             controller: _newTagController,
                             autofocus: true,
+                            enabled: !_isCreatingTag,
                             decoration: const InputDecoration(
                               hintText: 'New tag name',
                               isDense: true,
@@ -352,9 +383,17 @@ class _EditableInterestRowState extends State<_EditableInterestRow> {
                         ),
                       if (_creatingNewTag)
                         IconButton(
-                          icon: const Icon(Icons.check),
+                          icon: _isCreatingTag
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.check),
                           tooltip: 'Confirm new tag',
-                          onPressed: _confirmNewTag,
+                          onPressed: _isCreatingTag ? null : _confirmNewTag,
                           visualDensity: VisualDensity.compact,
                         ),
                     ],
@@ -367,19 +406,37 @@ class _EditableInterestRowState extends State<_EditableInterestRow> {
               ],
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final level in InterestLevel.values)
-                  ChoiceChip(
-                    label: Text(level.label),
-                    selected: widget.interest.level == level,
-                    onSelected: (_) => widget.onChanged(
-                      widget.interest.copyWith(level: level),
+            if (selectedTag == null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  'Pick a tag above to choose a level.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              )
+            else if (selectedTag.levels.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  '"${selectedTag.name}" has no levels defined yet. '
+                  'Edit it from the Tags screen to add some.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              )
+            else
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final level in selectedTag.levels)
+                    ChoiceChip(
+                      label: Text(level),
+                      selected: widget.interest.level == level,
+                      onSelected: (_) => widget.onChanged(
+                        widget.interest.copyWith(level: level),
+                      ),
                     ),
-                  ),
-              ],
-            ),
+                ],
+              ),
             const SizedBox(height: 8),
             TextField(
               controller: _notesController,
@@ -395,4 +452,13 @@ class _EditableInterestRowState extends State<_EditableInterestRow> {
       ),
     );
   }
+}
+
+/// Manual null-safe "find by id" — avoids depending on package:collection
+/// just for firstOrNull.
+Tag? _findTagById(List<Tag> tags, String id) {
+  for (final tag in tags) {
+    if (tag.id == id) return tag;
+  }
+  return null;
 }

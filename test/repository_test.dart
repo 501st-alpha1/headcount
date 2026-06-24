@@ -4,6 +4,7 @@ import 'package:headcount/models/enums.dart';
 import 'package:headcount/models/guest.dart';
 import 'package:headcount/models/person.dart';
 import 'package:headcount/models/simple_date.dart';
+import 'package:headcount/models/tag.dart';
 import 'package:headcount/repository/exceptions.dart';
 import 'package:headcount/repository/repository.dart';
 import 'package:test/test.dart';
@@ -74,7 +75,7 @@ void main() {
         interests: [
           const InterestTag(
             tag: 'hiking',
-            level: InterestLevel.easyOnly,
+            level: 'easy_only',
             notes: 'Bad knee',
           ),
         ],
@@ -83,7 +84,7 @@ void main() {
 
       final reloaded = await repo.people.load(person.id);
       expect(reloaded!.interests.first.tag, 'hiking');
-      expect(reloaded.interests.first.level, InterestLevel.easyOnly);
+      expect(reloaded.interests.first.level, 'easy_only');
     });
 
     test('delete() is a no-op for a nonexistent id', () async {
@@ -537,47 +538,52 @@ void main() {
   });
 
   group('DataSnapshot.allTagsInUse and peopleWithTag', () {
-    test('allTagsInUse returns distinct sorted tags across all people',
+    test('allTagsInUse returns one Tag per distinct tag in use, sorted by name',
         () async {
       await repo.people.create(
         name: 'Alice Chen',
         interests: [
-          const InterestTag(tag: 'hiking', level: InterestLevel.lovesIt),
-          const InterestTag(tag: 'board_games', level: InterestLevel.easyOnly),
+          const InterestTag(tag: 'hiking', level: 'loves_it'),
+          const InterestTag(tag: 'board_games', level: 'easy_only'),
         ],
       );
       await repo.people.create(
         name: 'Bob Smith',
         interests: [
-          const InterestTag(tag: 'hiking', level: InterestLevel.needsConvincing),
+          const InterestTag(tag: 'hiking', level: 'needs_convincing'),
         ],
       );
 
       final snapshot = await repo.loadAll();
-      expect(snapshot.allTagsInUse, ['board_games', 'hiking']);
+      final names = snapshot.allTagsInUse.map((t) => t.id).toList();
+      expect(names, ['board_games', 'hiking']);
     });
 
-    test('peopleWithTag sorts by interest level, enthusiastic first',
+    test('peopleWithTag sorts by the tag\'s own level order, enthusiastic first',
         () async {
       await repo.people.create(
         name: 'Charlie Diaz',
         interests: [
-          const InterestTag(tag: 'hiking', level: InterestLevel.notInterested),
+          const InterestTag(tag: 'hiking', level: 'not_interested'),
         ],
       );
       await repo.people.create(
         name: 'Alice Chen',
         interests: [
-          const InterestTag(tag: 'hiking', level: InterestLevel.lovesIt),
+          const InterestTag(tag: 'hiking', level: 'loves_it'),
         ],
       );
       await repo.people.create(
         name: 'Bob Smith',
         interests: [
-          const InterestTag(tag: 'hiking', level: InterestLevel.easyOnly),
+          const InterestTag(tag: 'hiking', level: 'easy_only'),
         ],
       );
 
+      // loadAll() auto-creates the "hiking" tag with Tag.defaultLevels,
+      // whose order is loves_it, easy_only, needs_convincing,
+      // not_interested — that's what peopleWithTag sorts by now, not a
+      // fixed enum.
       final snapshot = await repo.loadAll();
       final results = snapshot.peopleWithTag('hiking');
 
@@ -591,7 +597,7 @@ void main() {
       await repo.people.create(
         name: 'Alice Chen',
         interests: [
-          const InterestTag(tag: 'hiking', level: InterestLevel.lovesIt),
+          const InterestTag(tag: 'hiking', level: 'loves_it'),
         ],
       );
       await repo.people.create(name: 'Bob Smith');
@@ -601,6 +607,238 @@ void main() {
 
       expect(results, hasLength(1));
       expect(results.first.$1.name, 'Alice Chen');
+    });
+
+    test('a person whose level isn\'t in the tag\'s defined levels sorts after '
+        'everyone with a recognized level', () async {
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [const InterestTag(tag: 'hiking', level: 'loves_it')],
+      );
+      await repo.people.create(
+        name: 'Weird Data Bob',
+        interests: [
+          const InterestTag(tag: 'hiking', level: 'some_stale_level'),
+        ],
+      );
+
+      final snapshot = await repo.loadAll();
+      final results = snapshot.peopleWithTag('hiking');
+
+      expect(results, hasLength(2));
+      expect(results[0].$1.name, 'Alice Chen');
+      expect(results[1].$1.name, 'Weird Data Bob');
+    });
+  });
+
+  group('Tag auto-migration on loadAll', () {
+    test('creates a Tag definition (with Tag.defaultLevels) for a tag in use '
+        'that has no tags/*.toml file yet', () async {
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [const InterestTag(tag: 'hiking', level: 'loves_it')],
+      );
+
+      final snapshot = await repo.loadAll();
+      final hiking = snapshot.tagById('hiking');
+
+      expect(hiking, isNotNull);
+      expect(hiking!.levels, Tag.defaultLevels);
+      // The migration also writes the file, not just an in-memory Tag —
+      // confirm it's actually on disk so future loads don't redo this.
+      expect(await File(repo.tags.pathFor('hiking')).exists(), isTrue);
+    });
+
+    test('does not overwrite an existing tag definition', () async {
+      await repo.tags.create(
+        name: 'Hiking',
+        id: 'hiking',
+        levels: ['custom_a', 'custom_b'],
+      );
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [const InterestTag(tag: 'hiking', level: 'custom_a')],
+      );
+
+      final snapshot = await repo.loadAll();
+      expect(snapshot.tagById('hiking')!.levels, ['custom_a', 'custom_b']);
+    });
+
+    test('running loadAll twice does not duplicate or re-create tag files',
+        () async {
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [const InterestTag(tag: 'hiking', level: 'loves_it')],
+      );
+
+      await repo.loadAll();
+      final secondSnapshot = await repo.loadAll();
+
+      expect(secondSnapshot.tags.where((t) => t.id == 'hiking'), hasLength(1));
+    });
+
+    test('a tag with no one currently using it (e.g. after manual creation) '
+        'is left alone, not deleted', () async {
+      await repo.tags.create(name: 'Unused Tag', id: 'unused-tag');
+      final snapshot = await repo.loadAll();
+      expect(snapshot.tagById('unused-tag'), isNotNull);
+    });
+  });
+
+  group('Repository.renameTagLevel', () {
+    test('renames the level in the tag definition and cascades to every '
+        'person using it', () async {
+      final tag = await repo.tags.create(
+        name: 'Hiking',
+        levels: ['loves_it', 'easy_only'],
+      );
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [InterestTag(tag: tag.id, level: 'easy_only')],
+      );
+      await repo.people.create(
+        name: 'Bob Smith',
+        interests: [InterestTag(tag: tag.id, level: 'loves_it')],
+      );
+
+      await repo.renameTagLevel(
+        tag: tag,
+        oldLevel: 'easy_only',
+        newLevel: 'flat_trails_only',
+      );
+
+      final snapshot = await repo.loadAll();
+      expect(
+        snapshot.tagById(tag.id)!.levels,
+        ['loves_it', 'flat_trails_only'],
+      );
+      final alice = snapshot.personById('alice-chen')!;
+      expect(alice.interestIn(tag.id)!.level, 'flat_trails_only');
+      // Bob wasn't using the renamed level — untouched.
+      final bob = snapshot.personById('bob-smith')!;
+      expect(bob.interestIn(tag.id)!.level, 'loves_it');
+    });
+
+    test('preserves level order after a rename', () async {
+      final tag = await repo.tags.create(
+        name: 'Hiking',
+        levels: ['a', 'b', 'c'],
+      );
+      await repo.renameTagLevel(tag: tag, oldLevel: 'b', newLevel: 'b2');
+      final reloaded = await repo.tags.load(tag.id);
+      expect(reloaded!.levels, ['a', 'b2', 'c']);
+    });
+  });
+
+  group('Repository.peopleAtTagLevel and deleteTagLevel', () {
+    test('peopleAtTagLevel finds everyone currently at a given level',
+        () async {
+      final tag = await repo.tags.create(
+        name: 'Hiking',
+        levels: ['loves_it', 'easy_only'],
+      );
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [InterestTag(tag: tag.id, level: 'easy_only')],
+      );
+      await repo.people.create(
+        name: 'Bob Smith',
+        interests: [InterestTag(tag: tag.id, level: 'loves_it')],
+      );
+
+      final affected = await repo.peopleAtTagLevel(tag, 'easy_only');
+      expect(affected, hasLength(1));
+      expect(affected.first.name, 'Alice Chen');
+    });
+
+    test('deleteTagLevel removes the level and reassigns affected people',
+        () async {
+      final tag = await repo.tags.create(
+        name: 'Hiking',
+        levels: ['loves_it', 'easy_only', 'not_interested'],
+      );
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [InterestTag(tag: tag.id, level: 'easy_only')],
+      );
+
+      await repo.deleteTagLevel(
+        tag: tag,
+        levelToDelete: 'easy_only',
+        reassignTo: 'loves_it',
+      );
+
+      final snapshot = await repo.loadAll();
+      expect(snapshot.tagById(tag.id)!.levels, ['loves_it', 'not_interested']);
+      final alice = snapshot.personById('alice-chen')!;
+      expect(alice.interestIn(tag.id)!.level, 'loves_it');
+    });
+
+    test('deleteTagLevel rejects reassignTo equal to the level being deleted',
+        () async {
+      final tag = await repo.tags.create(
+        name: 'Hiking',
+        levels: ['loves_it', 'easy_only'],
+      );
+      expect(
+        () => repo.deleteTagLevel(
+          tag: tag,
+          levelToDelete: 'easy_only',
+          reassignTo: 'easy_only',
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('deleteTagLevel rejects a reassignTo that isn\'t one of the tag\'s levels',
+        () async {
+      final tag = await repo.tags.create(
+        name: 'Hiking',
+        levels: ['loves_it', 'easy_only'],
+      );
+      expect(
+        () => repo.deleteTagLevel(
+          tag: tag,
+          levelToDelete: 'easy_only',
+          reassignTo: 'nonexistent_level',
+        ),
+        throwsArgumentError,
+      );
+    });
+  });
+
+  group('Repository.deleteTag', () {
+    test('removes the tag file and every person\'s InterestTag entry for it',
+        () async {
+      final tag = await repo.tags.create(name: 'Hiking');
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [InterestTag(tag: tag.id, level: 'loves_it')],
+      );
+
+      await repo.deleteTag(tag.id);
+
+      expect(await File(repo.tags.pathFor(tag.id)).exists(), isFalse);
+      final reloadedAlice = await repo.people.load('alice-chen');
+      expect(reloadedAlice!.interests, isEmpty);
+    });
+
+    test('leaves people with other interests untouched', () async {
+      final hiking = await repo.tags.create(name: 'Hiking');
+      final boardGames = await repo.tags.create(name: 'Board Games');
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [
+          InterestTag(tag: hiking.id, level: 'loves_it'),
+          InterestTag(tag: boardGames.id, level: 'loves_it'),
+        ],
+      );
+
+      await repo.deleteTag(hiking.id);
+
+      final reloaded = await repo.people.load('alice-chen');
+      expect(reloaded!.interests, hasLength(1));
+      expect(reloaded.interests.first.tag, boardGames.id);
     });
   });
 }
