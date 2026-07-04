@@ -1,0 +1,17 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F4C44"/>
+      <stop offset="100%" stop-color="#0B3530"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <!-- Four tally marks, centered: group width 250px, starts at x=131 -->
+  <rect x="131" y="130" width="34" height="252" rx="17" fill="#F4EFE6"/>
+  <rect x="203" y="130" width="34" height="252" rx="17" fill="#F4EFE6"/>
+  <rect x="275" y="130" width="34" height="252" rx="17" fill="#F4EFE6"/>
+  <rect x="347" y="130" width="34" height="252" rx="17" fill="#F4EFE6"/>
+  <!-- Diagonal strike, rotated around canvas center (256, 256) -->
+  <rect x="111" y="239" width="290" height="34" rx="17"
+        transform="rotate(-26 256 256)" fill="#E8A33D"/>
+</svg>
