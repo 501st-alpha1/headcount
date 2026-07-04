@@ -92,3 +92,13 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+  assets:
+    - assets/icon/
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/headcount_icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#0F4C44"
+  adaptive_icon_foreground: "assets/icon/headcount_icon_fg.png"
