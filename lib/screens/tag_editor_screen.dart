@@ -11,14 +11,10 @@ import '../repository/repository.dart';
 /// Tag.defaultLevels, since a brand-new tag with zero levels isn't
 /// useful); when supplied, it edits the existing one.
 ///
-/// Level changes are NOT staged-then-saved like the rest of this form —
-/// renaming or deleting a level immediately calls through to
-/// Repository.renameTagLevel / deleteTagLevel, since those need to
-/// cascade to every person using the tag, and doing that as a batched
-/// diff against some "original level list" would be a lot more complex
-/// for no real benefit here. The name field and adding brand-new levels
-/// (which by definition nothing references yet) still batch into one
-/// Save, like other editors in this app.
+/// Rename and delete apply immediately (they cascade to every person
+/// using the tag, so staging them as a diff would be complex). Adding
+/// new levels and reordering are staged into the Save button — neither
+/// affects any person's data, so there's no reason to write immediately.
 class TagEditorScreen extends ConsumerStatefulWidget {
   final String? tagId;
 
@@ -67,17 +63,21 @@ class _TagEditorScreenState extends ConsumerState<TagEditorScreen> {
         if (existing == null) {
           throw StateError('Tag ${widget.tagId} no longer exists.');
         }
-        // Level renames/deletes already happened immediately (see
-        // _renameLevel/_deleteLevel below) and are reflected on disk.
-        // This save only needs to carry forward the name and any
-        // brand-new levels appended since — re-read the latest levels
-        // from disk first so we don't clobber a rename that happened
-        // moments ago with this screen's possibly-stale _levels list.
+        // _levels holds the current order (possibly reordered by drag)
+        // plus any newly-added levels. Renames/deletes already happened
+        // on disk immediately — re-read to get the latest disk state,
+        // then apply our staged order on top of it: keep any levels that
+        // survived rename/delete in the user's chosen order, appending
+        // anything newly added that isn't on disk yet.
         final latest = await repository.tags.load(existing.id) ?? existing;
-        final newlyAdded = _levels.where((l) => !latest.levels.contains(l));
+        final latestSet = latest.levels.toSet();
+        // Levels that exist on disk AND are in _levels, in _levels' order.
+        final reordered = _levels.where(latestSet.contains).toList();
+        // Brand-new levels (not yet on disk).
+        final newlyAdded = _levels.where((l) => !latestSet.contains(l));
         final updated = latest.copyWith(
           name: _nameController.text.trim(),
-          levels: [...latest.levels, ...newlyAdded],
+          levels: [...reordered, ...newlyAdded],
         );
         await repository.saveTag(updated);
       } else {
@@ -313,75 +313,107 @@ class _TagEditorScreenState extends ConsumerState<TagEditorScreen> {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextField(
-            controller: _nameController,
-            decoration: const InputDecoration(
-              labelText: 'Tag name',
-              border: OutlineInputBorder(),
-            ),
-            autofocus: !widget.isEditing,
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Text('Levels', style: Theme.of(context).textTheme.labelLarge),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.add),
-                tooltip: 'Add level',
-                onPressed: () => _addLevel(context),
-              ),
-            ],
-          ),
-          Text(
-            'First = most enthusiastic. Renaming or deleting a level here '
-            'applies immediately and updates everyone who has it.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: 8),
-          if (_levels.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(
-                'No levels yet — add at least one.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            )
-          else
-            for (final level in _levels)
-              Card(
-                margin: const EdgeInsets.only(bottom: 8),
-                child: ListTile(
-                  title: Text(level),
-                  trailing: widget.isEditing && existing != null
-                      ? Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined),
-                              tooltip: 'Rename',
-                              onPressed: () =>
-                                  _renameLevel(context, existing, level),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline),
-                              tooltip: 'Delete',
-                              onPressed: () =>
-                                  _deleteLevel(context, existing, level),
-                            ),
-                          ],
-                        )
-                      : IconButton(
-                          icon: const Icon(Icons.close),
-                          tooltip: 'Remove',
-                          onPressed: () =>
-                              setState(() => _levels.remove(level)),
-                        ),
+          // Fixed header: name + levels section label
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Tag name',
+                    border: OutlineInputBorder(),
+                  ),
+                  autofocus: !widget.isEditing,
                 ),
-              ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Text(
+                      'Levels',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.add),
+                      tooltip: 'Add level',
+                      onPressed: () => _addLevel(context),
+                    ),
+                  ],
+                ),
+                Text(
+                  'First = most enthusiastic. Drag to reorder. '
+                  'Renaming or deleting applies immediately.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+          // Levels list — flexible so it fills remaining space
+          Expanded(
+            child: _levels.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'No levels yet — add at least one.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  )
+                : ReorderableListView(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    onReorder: (oldIndex, newIndex) {
+                      setState(() {
+                        if (newIndex > oldIndex) newIndex--;
+                        final item = _levels.removeAt(oldIndex);
+                        _levels.insert(newIndex, item);
+                      });
+                    },
+                    children: [
+                      for (final level in _levels)
+                        Card(
+                          key: ValueKey(level),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            // Drag handle on the left
+                            leading: const Icon(
+                              Icons.drag_handle,
+                              color: Colors.grey,
+                            ),
+                            title: Text(level),
+                            trailing: widget.isEditing && existing != null
+                                ? Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_outlined),
+                                        tooltip: 'Rename',
+                                        onPressed: () =>
+                                            _renameLevel(context, existing, level),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline),
+                                        tooltip: 'Delete',
+                                        onPressed: () =>
+                                            _deleteLevel(context, existing, level),
+                                      ),
+                                    ],
+                                  )
+                                : IconButton(
+                                    icon: const Icon(Icons.close),
+                                    tooltip: 'Remove',
+                                    onPressed: () =>
+                                        setState(() => _levels.remove(level)),
+                                  ),
+                          ),
+                        ),
+                    ],
+                  ),
+          ),
         ],
       ),
     );
