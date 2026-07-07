@@ -86,6 +86,7 @@ void main() {
 
   group('RsvpStatus.fromToml', () {
     test('parses current values', () {
+      expect(RsvpStatus.fromToml('to_invite'), RsvpStatus.toInvite);
       expect(RsvpStatus.fromToml('yes'), RsvpStatus.yes);
       expect(RsvpStatus.fromToml('probably'), RsvpStatus.probably);
       expect(RsvpStatus.fromToml('maybe'), RsvpStatus.maybe);
@@ -115,6 +116,8 @@ void main() {
         expect(status.tomlValue, isNot('soft_no'));
         expect(status.tomlValue, isNot('declined'));
       }
+      // And confirm to_invite writes correctly.
+      expect(RsvpStatus.toInvite.tomlValue, 'to_invite');
     });
   });
 
@@ -423,6 +426,27 @@ notes = ""
   });
 
   group('Guest.needsFollowUp', () {
+    test('to_invite on an upcoming event always needs follow-up', () {
+      // toInvite = never contacted, so always surfaces in the follow-up
+      // list regardless of lastFollowUp (which should always be null for
+      // a newly-added toInvite guest anyway).
+      final guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.toInvite,
+        invitedVia: InviteMethod.dm,
+      );
+      expect(guest.needsFollowUp(true), isTrue);
+    });
+
+    test('to_invite on a past event does not need follow-up', () {
+      final guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.toInvite,
+        invitedVia: InviteMethod.dm,
+      );
+      expect(guest.needsFollowUp(false), isFalse);
+    });
+
     test('no_response on an upcoming event with no contact yet needs follow-up', () {
       final guest = Guest(
         personId: 'p',

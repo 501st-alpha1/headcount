@@ -1,5 +1,9 @@
 /// RSVP status for a guest on a specific event.
 enum RsvpStatus {
+  /// Added to the guest list but not yet contacted. Distinct from
+  /// noResponse (which means you invited them and heard nothing back) —
+  /// this is the pre-invite state. Always surfaces in the follow-up list.
+  toInvite,
   yes,
   probably,
   maybe,
@@ -9,6 +13,7 @@ enum RsvpStatus {
 
   /// The string used in TOML files. Kept stable even if enum names change.
   String get tomlValue => switch (this) {
+        RsvpStatus.toInvite => 'to_invite',
         RsvpStatus.yes => 'yes',
         RsvpStatus.probably => 'probably',
         RsvpStatus.maybe => 'maybe',
@@ -19,15 +24,14 @@ enum RsvpStatus {
 
   static RsvpStatus fromToml(String value) {
     return switch (value) {
+      'to_invite' => RsvpStatus.toInvite,
       'yes' => RsvpStatus.yes,
       'probably' => RsvpStatus.probably,
       'maybe' => RsvpStatus.maybe,
       'probably_not' => RsvpStatus.probablyNot,
       'no' => RsvpStatus.no,
       'no_response' => RsvpStatus.noResponse,
-      // Backward compatibility with files written before this status set
-      // changed: "soft_yes"/"soft_no" were renamed, and "declined" was
-      // merged into "no" (declined_reason still applies — see Guest).
+      // Backward compatibility: soft_yes/soft_no renamed, declined merged into no.
       'soft_yes' => RsvpStatus.probably,
       'soft_no' => RsvpStatus.probablyNot,
       'declined' => RsvpStatus.no,
@@ -37,6 +41,7 @@ enum RsvpStatus {
 
   /// Human-readable label for UI display.
   String get label => switch (this) {
+        RsvpStatus.toInvite => 'To invite',
         RsvpStatus.yes => 'Yes',
         RsvpStatus.probably => 'Probably',
         RsvpStatus.maybe => 'Maybe',

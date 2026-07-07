@@ -63,23 +63,22 @@ class Guest {
   }
 
   /// Whether this guest is currently due for a follow-up: the event is
-  /// upcoming, their RSVP is still unresolved (no_response, maybe, or a
-  /// soft yes/no), and at least [followUpCooldownDays] have passed since
-  /// they were last contacted (or they've never been contacted at all).
-  /// [today] defaults to the real current date; tests pass it explicitly
-  /// for deterministic cooldown checks.
-  ///
-  /// [eventIsUpcoming] is passed in by the caller (Event knows its own date;
-  /// Guest doesn't store a reference back to its event).
+  /// upcoming, their RSVP is still unresolved or pre-invite, and at
+  /// least [followUpCooldownDays] have passed since they were last
+  /// contacted (or they've never been contacted at all). toInvite always
+  /// returns true when the event is upcoming — you haven't reached out
+  /// yet, so there's nothing to cool down on.
   bool needsFollowUp(bool eventIsUpcoming, {SimpleDate? today}) {
     if (!eventIsUpcoming) return false;
 
-    final isUnresolved = rsvp == RsvpStatus.noResponse ||
+    final isUnresolved = rsvp == RsvpStatus.toInvite ||
+        rsvp == RsvpStatus.noResponse ||
         rsvp == RsvpStatus.maybe ||
         rsvp == RsvpStatus.probably ||
         rsvp == RsvpStatus.probablyNot;
     if (!isUnresolved) return false;
 
+    // toInvite means never contacted — always needs follow-up.
     if (lastFollowUp == null) return true;
 
     final effectiveToday = today ?? SimpleDate.today();

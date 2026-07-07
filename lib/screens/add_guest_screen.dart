@@ -163,7 +163,12 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
             ListTile(
               leading: const Icon(Icons.person_outline),
               title: Text(person.name),
-              onTap: () => _addPeopleByIds(event, {person.id}),
+              // Tap opens a quick status picker before adding — default
+              // is toInvite (not yet contacted), but the user can switch
+              // to noResponse (already invited, just tracking) or any
+              // other status right here without needing to open the full
+              // RSVP sheet afterward.
+              onTap: () => _showAddPersonSheet(context, event, person.id),
             ),
         ],
       ],
@@ -192,18 +197,83 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
     }
   }
 
-  Future<void> _addPeopleByIds(Event event, Set<String> personIds) async {
+  /// Shows a bottom sheet letting the user pick a status before adding
+  /// the person. Default is toInvite (not yet contacted). Confirming
+  /// adds the person with the chosen status and dismisses the sheet.
+  Future<void> _showAddPersonSheet(
+    BuildContext context,
+    Event event,
+    String personId,
+  ) async {
+    RsvpStatus chosen = RsvpStatus.toInvite;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Add with status',
+                      style: Theme.of(sheetContext).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        for (final status in RsvpStatus.values)
+                          ChoiceChip(
+                            label: Text(status.label),
+                            selected: chosen == status,
+                            onSelected: (_) =>
+                                setSheetState(() => chosen = status),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: () {
+                        Navigator.of(sheetContext).pop();
+                        _addPeopleByIds(event, {personId}, status: chosen);
+                      },
+                      child: const Text('Add'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _addPeopleByIds(
+    Event event,
+    Set<String> personIds, {
+    RsvpStatus status = RsvpStatus.toInvite,
+  }) async {
     final existingIds = event.guests.map((g) => g.personId).toSet();
-    final today = SimpleDate.today();
     final newGuests = personIds
         .where((id) => !existingIds.contains(id))
         .map((id) => Guest(
               personId: id,
-              rsvp: RsvpStatus.noResponse,
+              rsvp: status,
               invitedVia: InviteMethod.dm,
-              // Being added/invited counts as the first contact, so the
-              // follow-up cooldown starts now.
-              lastFollowUp: today,
+              // toInvite means not yet contacted — leave lastFollowUp null
+              // so it always surfaces in the follow-up list. Any other
+              // status (e.g. noResponse, meaning already invited) treats
+              // the moment of adding as the first contact, starting the
+              // cooldown so it doesn't show as immediately overdue.
+              lastFollowUp:
+                  status == RsvpStatus.toInvite ? null : SimpleDate.today(),
             ))
         .toList();
 

@@ -549,6 +549,62 @@ void main() {
     });
   });
 
+  group('RsvpStatus.toInvite default and lastFollowUp behavior', () {
+    test('a guest added with toInvite has null lastFollowUp and always '
+        'needs follow-up', () async {
+      final alice = await repo.people.create(name: 'Alice Chen');
+      var event = await repo.events.create(
+        name: 'Summer Picnic',
+        date: const SimpleDate(year: 2099, month: 8, day: 15),
+      );
+      event = event.copyWith(guests: [
+        // Simulate what AddGuestScreen does for an individual add
+        Guest(
+          personId: alice.id,
+          rsvp: RsvpStatus.toInvite,
+          invitedVia: InviteMethod.dm,
+          // lastFollowUp deliberately null — not yet contacted
+        ),
+      ]);
+      await repo.saveEvent(event);
+
+      final snapshot = await repo.loadAll();
+      final reloaded = snapshot.events.first;
+      final guest = reloaded.guestFor(alice.id)!;
+
+      expect(guest.rsvp, RsvpStatus.toInvite);
+      expect(guest.lastFollowUp, isNull);
+      expect(guest.needsFollowUp(true), isTrue);
+    });
+
+    test('a guest added with noResponse (already invited) gets lastFollowUp '
+        'set to today and respects the cooldown', () async {
+      final alice = await repo.people.create(name: 'Alice Chen');
+      final today = SimpleDate.today();
+      var event = await repo.events.create(
+        name: 'Summer Picnic',
+        date: const SimpleDate(year: 2099, month: 8, day: 15),
+      );
+      event = event.copyWith(guests: [
+        Guest(
+          personId: alice.id,
+          rsvp: RsvpStatus.noResponse,
+          invitedVia: InviteMethod.dm,
+          lastFollowUp: today,
+        ),
+      ]);
+      await repo.saveEvent(event);
+
+      final snapshot = await repo.loadAll();
+      final guest = snapshot.events.first.guestFor(alice.id)!;
+
+      expect(guest.rsvp, RsvpStatus.noResponse);
+      expect(guest.lastFollowUp, today);
+      // Within the cooldown — should NOT need follow-up yet.
+      expect(guest.needsFollowUp(true, today: today), isFalse);
+    });
+  });
+
   group('DataSnapshot.allPlatformsInUse', () {
     test('collects distinct platforms from people, sorted alphabetically',
         () async {

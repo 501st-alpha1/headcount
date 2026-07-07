@@ -17,6 +17,7 @@ import 'widgets/guest_row.dart';
 enum _GuestFilter {
   all,
   needsFollowUp,
+  toInvite,
   yes,
   probably,
   maybe,
@@ -29,6 +30,7 @@ extension on _GuestFilter {
   String get label => switch (this) {
         _GuestFilter.all => 'All',
         _GuestFilter.needsFollowUp => 'Needs follow-up',
+        _GuestFilter.toInvite => RsvpStatus.toInvite.label,
         _GuestFilter.yes => RsvpStatus.yes.label,
         _GuestFilter.probably => RsvpStatus.probably.label,
         _GuestFilter.maybe => RsvpStatus.maybe.label,
@@ -168,6 +170,8 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
       _GuestFilter.needsFollowUp => resolved
           .where((p) => p.$1.needsFollowUp(event.isUpcoming))
           .toList(),
+      _GuestFilter.toInvite =>
+        resolved.where((p) => p.$1.rsvp == RsvpStatus.toInvite).toList(),
       _GuestFilter.yes =>
         resolved.where((p) => p.$1.rsvp == RsvpStatus.yes).toList(),
       _GuestFilter.probably =>

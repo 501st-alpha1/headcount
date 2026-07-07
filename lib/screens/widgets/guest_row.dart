@@ -75,6 +75,12 @@ class _RsvpChip extends StatelessWidget {
   (Color, Color) _colorsFor(RsvpStatus status, ThemeData theme) {
     final scheme = theme.colorScheme;
     return switch (status) {
+      // toInvite: tertiary container — distinct from the noResponse gray,
+      // signals "action needed" without the urgency of error red.
+      RsvpStatus.toInvite => (
+          scheme.tertiaryContainer,
+          scheme.onTertiaryContainer,
+        ),
       RsvpStatus.yes => (scheme.primaryContainer, scheme.onPrimaryContainer),
       RsvpStatus.probably => (
           scheme.primaryContainer.withValues(alpha: 0.5),
@@ -85,9 +91,6 @@ class _RsvpChip extends StatelessWidget {
           scheme.surfaceContainerHighest,
           scheme.onSurfaceVariant,
         ),
-      // "no" absorbed the old "declined" status, including its more
-      // visually distinct error-container treatment — a firm no is worth
-      // standing out from the neutral no_response/probably_not gray.
       RsvpStatus.no => (scheme.errorContainer, scheme.onErrorContainer),
       RsvpStatus.noResponse => (
           scheme.surfaceContainerHighest,
