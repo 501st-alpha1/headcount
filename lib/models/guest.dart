@@ -20,6 +20,16 @@ class Guest {
   final SimpleDate? lastFollowUp;
   final String notes;
 
+  /// When true, this guest is manually excluded from the needs-follow-up
+  /// list regardless of their status or cooldown. Useful when you know
+  /// someone is unlikely to come but doesn't warrant a firm no, or when
+  /// you've had an informal conversation and don't need to chase further.
+  ///
+  /// Suppression auto-lifts when [rsvp] changes to an unresolved status
+  /// — see copyWith. This means suppression means "given their *current*
+  /// status, I've decided not to chase," not a permanent mark.
+  final bool followUpSuppressed;
+
   /// Days that must pass since [lastFollowUp] before a guest in an
   /// unresolved RSVP state is considered due for another follow-up.
   /// Prevents "needs follow-up" from firing again the moment you've
@@ -36,6 +46,7 @@ class Guest {
     this.followUpCount = 0,
     this.lastFollowUp,
     this.notes = '',
+    this.followUpSuppressed = false,
   });
 
   Guest copyWith({
@@ -48,10 +59,27 @@ class Guest {
     SimpleDate? lastFollowUp,
     bool clearLastFollowUp = false,
     String? notes,
+    bool? followUpSuppressed,
   }) {
+    final newRsvp = rsvp ?? this.rsvp;
+
+    // Auto-lift suppression when the status changes to something that
+    // would normally need follow-up — suppression was a judgment call
+    // about the old status, not a blanket decision about this person.
+    final unresolved = {
+      RsvpStatus.toInvite,
+      RsvpStatus.noResponse,
+      RsvpStatus.maybe,
+      RsvpStatus.probably,
+      RsvpStatus.probablyNot,
+    };
+    final suppressionLifted = rsvp != null &&
+        rsvp != this.rsvp &&
+        unresolved.contains(newRsvp);
+
     return Guest(
       personId: personId ?? this.personId,
-      rsvp: rsvp ?? this.rsvp,
+      rsvp: newRsvp,
       declinedReason: declinedReason ?? this.declinedReason,
       invitedVia: invitedVia ?? this.invitedVia,
       platform: platform ?? this.platform,
@@ -59,17 +87,21 @@ class Guest {
       lastFollowUp:
           clearLastFollowUp ? null : (lastFollowUp ?? this.lastFollowUp),
       notes: notes ?? this.notes,
+      followUpSuppressed: suppressionLifted
+          ? false
+          : (followUpSuppressed ?? this.followUpSuppressed),
     );
   }
 
-  /// Whether this guest is currently due for a follow-up: the event is
-  /// upcoming, their RSVP is still unresolved or pre-invite, and at
-  /// least [followUpCooldownDays] have passed since they were last
-  /// contacted (or they've never been contacted at all). toInvite always
-  /// returns true when the event is upcoming — you haven't reached out
-  /// yet, so there's nothing to cool down on.
+  /// Whether this guest is currently due for a follow-up. Returns false
+  /// immediately if [followUpSuppressed] is true — that's a manual
+  /// override that takes priority over all other logic. Otherwise:
+  /// the event must be upcoming, the status must be unresolved, and
+  /// enough time must have passed since last contact (or there's been
+  /// no contact at all).
   bool needsFollowUp(bool eventIsUpcoming, {SimpleDate? today}) {
     if (!eventIsUpcoming) return false;
+    if (followUpSuppressed) return false;
 
     final isUnresolved = rsvp == RsvpStatus.toInvite ||
         rsvp == RsvpStatus.noResponse ||
@@ -78,7 +110,8 @@ class Guest {
         rsvp == RsvpStatus.probablyNot;
     if (!isUnresolved) return false;
 
-    // toInvite means never contacted — always needs follow-up.
+    // toInvite means never contacted — always needs follow-up
+    // (unless suppressed, which is handled above).
     if (lastFollowUp == null) return true;
 
     final effectiveToday = today ?? SimpleDate.today();
@@ -97,6 +130,9 @@ class Guest {
       if (lastFollowUp != null)
         'last_follow_up': lastFollowUp!.toTomlLocalDate(),
       'notes': notes,
+      // Only write the field when true — omitting it (false by default)
+      // keeps existing files clean and uncluttered.
+      if (followUpSuppressed) 'follow_up_suppressed': true,
     };
   }
 
@@ -110,6 +146,9 @@ class Guest {
       followUpCount: (map['follow_up_count'] as int?) ?? 0,
       lastFollowUp: readSimpleDate(map, 'last_follow_up', optional: true),
       notes: (map['notes'] as String?) ?? '',
+      // Missing key = false (backward compat with existing files).
+      followUpSuppressed:
+          (map['follow_up_suppressed'] as bool?) ?? false,
     );
   }
 }

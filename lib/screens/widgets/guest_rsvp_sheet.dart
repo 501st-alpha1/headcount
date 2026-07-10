@@ -58,6 +58,7 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
   late TextEditingController _notesController;
   late int _followUpCount;
   late SimpleDate? _lastFollowUp;
+  late bool _followUpSuppressed;
 
   @override
   void initState() {
@@ -70,6 +71,7 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
     _notesController = TextEditingController(text: g.notes);
     _followUpCount = g.followUpCount;
     _lastFollowUp = g.lastFollowUp;
+    _followUpSuppressed = g.followUpSuppressed;
   }
 
   @override
@@ -90,6 +92,7 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
       followUpCount: _followUpCount,
       lastFollowUp: _lastFollowUp,
       clearLastFollowUp: _lastFollowUp == null,
+      followUpSuppressed: _followUpSuppressed,
     );
   }
 
@@ -102,6 +105,28 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
     setState(() {
       _followUpCount += 1;
       _lastFollowUp = SimpleDate.today();
+      // Logging a follow-up is an active choice to engage — clear
+      // suppression so the person surfaces again after the cooldown.
+      _followUpSuppressed = false;
+    });
+  }
+
+  void _onRsvpChanged(RsvpStatus status) {
+    setState(() {
+      _rsvp = status;
+      // Auto-lift suppression when status changes to something unresolved,
+      // mirroring the copyWith behavior in Guest itself so the UI stays
+      // consistent with what will be saved.
+      const unresolved = {
+        RsvpStatus.toInvite,
+        RsvpStatus.noResponse,
+        RsvpStatus.maybe,
+        RsvpStatus.probably,
+        RsvpStatus.probablyNot,
+      };
+      if (unresolved.contains(status) && status != widget.initialGuest.rsvp) {
+        _followUpSuppressed = false;
+      }
     });
   }
 
@@ -178,7 +203,7 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
                 return ChoiceChip(
                   label: Text(status.label),
                   selected: _rsvp == status,
-                  onSelected: (_) => setState(() => _rsvp = status),
+                  onSelected: (_) => _onRsvpChanged(status),
                 );
               }).toList(),
             ),
@@ -237,6 +262,16 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
                   label: const Text('Log follow-up'),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Follow-up not required'),
+              subtitle: const Text(
+                'Exclude from the follow-up list regardless of status.',
+              ),
+              value: _followUpSuppressed,
+              onChanged: (value) => setState(() => _followUpSuppressed = value),
             ),
 
             const SizedBox(height: 20),

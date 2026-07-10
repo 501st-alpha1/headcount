@@ -41,6 +41,15 @@ class GuestRow extends StatelessWidget {
               color: theme.colorScheme.error,
             ),
             const SizedBox(width: 8),
+          ] else if (guest.followUpSuppressed) ...[
+            // Suppressed — muted icon to show this person is intentionally
+            // excluded from the follow-up list without drawing attention.
+            Icon(
+              Icons.notifications_off_outlined,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+            ),
+            const SizedBox(width: 8),
           ],
           _RsvpChip(status: guest.rsvp),
         ],

@@ -532,6 +532,56 @@ notes = ""
       expect(guest.needsFollowUp(true, today: justBefore), isFalse);
     });
 
+    test('a suppressed guest never needs follow-up regardless of status or cooldown',
+        () {
+      final guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.noResponse,
+        invitedVia: InviteMethod.dm,
+        followUpSuppressed: true,
+      );
+      expect(guest.needsFollowUp(true), isFalse);
+    });
+
+    test('suppression takes priority even for toInvite (never contacted)', () {
+      final guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.toInvite,
+        invitedVia: InviteMethod.dm,
+        followUpSuppressed: true,
+      );
+      expect(guest.needsFollowUp(true), isFalse);
+    });
+
+    test(
+        'changing rsvp to an unresolved status auto-lifts suppression in copyWith',
+        () {
+      final suppressed = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.probablyNot,
+        invitedVia: InviteMethod.dm,
+        followUpSuppressed: true,
+      );
+      // Changing to maybe (unresolved) should lift suppression.
+      final updated = suppressed.copyWith(rsvp: RsvpStatus.maybe);
+      expect(updated.followUpSuppressed, isFalse);
+    });
+
+    test(
+        'changing rsvp to a resolved status does not lift suppression',
+        () {
+      final suppressed = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.probablyNot,
+        invitedVia: InviteMethod.dm,
+        followUpSuppressed: true,
+      );
+      // Changing to yes (resolved) — suppression stays, doesn't matter
+      // since yes wouldn't trigger follow-up anyway.
+      final updated = suppressed.copyWith(rsvp: RsvpStatus.yes);
+      expect(updated.followUpSuppressed, isTrue);
+    });
+
     test('a firm yes never needs follow-up regardless of contact history', () {
       final guest = Guest(
         personId: 'p',
