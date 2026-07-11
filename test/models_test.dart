@@ -394,6 +394,61 @@ notes = ""
       expect(guest!.rsvp, RsvpStatus.no);
       expect(guest.declinedReason, 'Out of town');
     });
+
+    test('followUpSuppressed = true is written to and read from TOML', () {
+      final event = Event(
+        id: 'e',
+        name: 'E',
+        date: const SimpleDate(year: 2026, month: 1, day: 1),
+        guests: [
+          Guest(
+            personId: 'p',
+            rsvp: RsvpStatus.noResponse,
+            invitedVia: InviteMethod.dm,
+            followUpSuppressed: true,
+          ),
+        ],
+      );
+      final toml = event.toTomlString();
+      expect(toml, contains('follow_up_suppressed = true'));
+      final parsed = Event.fromTomlString(toml);
+      expect(parsed.guestFor('p')!.followUpSuppressed, isTrue);
+    });
+
+    test('followUpSuppressed = false is omitted from TOML (backward compat)',
+        () {
+      final event = Event(
+        id: 'e',
+        name: 'E',
+        date: const SimpleDate(year: 2026, month: 1, day: 1),
+        guests: [
+          Guest(
+            personId: 'p',
+            rsvp: RsvpStatus.noResponse,
+            invitedVia: InviteMethod.dm,
+          ),
+        ],
+      );
+      expect(event.toTomlString(), isNot(contains('follow_up_suppressed')));
+    });
+
+    test('a legacy file with no follow_up_suppressed key loads as false', () {
+      const legacyToml = '''
+id = "e"
+name = "E"
+date = 2026-01-01
+
+[[guests]]
+person_id = "p"
+rsvp = "no_response"
+invited_via = "dm"
+platform = ""
+follow_up_count = 0
+notes = ""
+''';
+      final event = Event.fromTomlString(legacyToml);
+      expect(event.guestFor('p')!.followUpSuppressed, isFalse);
+    });
   });
 
   group('Event.isUpcoming', () {
