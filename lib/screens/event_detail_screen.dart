@@ -199,7 +199,7 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
             RsvpStatus.probablyNot,
           };
           return unresolved.contains(p.$1.rsvp);
-        }).toList(),
+        }).where((p) => !p.$1.followUpSuppressed).toList(),
       _GuestFilter.toInvite =>
         resolved.where((p) => p.$1.rsvp == RsvpStatus.toInvite).toList(),
       _GuestFilter.yes =>
