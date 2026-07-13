@@ -89,7 +89,26 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
 
     final resolved = dataSnapshot.resolvedGuestsFor(event);
     final filtered = _applyFilter(resolved, event);
-    final grouped = _groupByStatus(filtered);
+
+    // The "Needs follow-up" filter shows all unresolved guests sorted by
+    // oldest contact first (null = never contacted = top of list), so you
+    // can see who you haven't talked to in a while even if the cooldown
+    // hasn't expired yet. All other filters keep the normal grouped-by-
+    // status layout.
+    final List<(String, List<(Guest, Person)>)> grouped;
+    if (_filter == _GuestFilter.needsFollowUp) {
+      final sorted = [...filtered]..sort((a, b) {
+          final aDate = a.$1.lastFollowUp;
+          final bDate = b.$1.lastFollowUp;
+          if (aDate == null && bDate == null) return 0;
+          if (aDate == null) return -1; // never contacted → first
+          if (bDate == null) return 1;
+          return aDate.compareTo(bDate); // oldest contact first
+        });
+      grouped = sorted.isEmpty ? [] : [('Unresolved — oldest contact first', sorted)];
+    } else {
+      grouped = _groupByStatus(filtered);
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -167,9 +186,20 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
   ) {
     return switch (_filter) {
       _GuestFilter.all => resolved,
-      _GuestFilter.needsFollowUp => resolved
-          .where((p) => p.$1.needsFollowUp(event.isUpcoming))
-          .toList(),
+      // All unresolved guests — sorting by last contact is handled in
+      // _buildForSnapshot; here we just filter to the right set.
+      // This includes suppressed guests (they show at the bottom of the
+      // sorted list so you can see them without them cluttering the top).
+      _GuestFilter.needsFollowUp => resolved.where((p) {
+          const unresolved = {
+            RsvpStatus.toInvite,
+            RsvpStatus.noResponse,
+            RsvpStatus.maybe,
+            RsvpStatus.probably,
+            RsvpStatus.probablyNot,
+          };
+          return unresolved.contains(p.$1.rsvp);
+        }).toList(),
       _GuestFilter.toInvite =>
         resolved.where((p) => p.$1.rsvp == RsvpStatus.toInvite).toList(),
       _GuestFilter.yes =>

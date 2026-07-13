@@ -4,9 +4,20 @@ import '../../models/enums.dart';
 import '../../models/guest.dart';
 import '../../models/person.dart';
 
+/// The statuses where last-contact info is meaningful to show inline —
+/// resolved statuses (yes/no) don't need it since there's nothing to chase.
+const _unresolvedStatuses = {
+  RsvpStatus.toInvite,
+  RsvpStatus.noResponse,
+  RsvpStatus.maybe,
+  RsvpStatus.probably,
+  RsvpStatus.probablyNot,
+};
+
 /// One row in the event detail screen's guest list: name, RSVP status
-/// chip, platform, and a follow-up indicator when relevant. Tapping the
-/// row is handled by the caller (opens the RSVP sheet).
+/// chip, platform, last contact info (for unresolved statuses), and a
+/// follow-up indicator when relevant. Tapping the row is handled by the
+/// caller (opens the RSVP sheet).
 class GuestRow extends StatelessWidget {
   final Guest guest;
   final Person person;
@@ -24,13 +35,12 @@ class GuestRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final subtitle = _buildSubtitle();
 
     return ListTile(
       onTap: onTap,
       title: Text(person.name),
-      subtitle: guest.platform.isEmpty
-          ? null
-          : Text('${guest.invitedVia.label} · ${guest.platform}'),
+      subtitle: subtitle == null ? null : Text(subtitle),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -55,6 +65,27 @@ class GuestRow extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String? _buildSubtitle() {
+    final parts = <String>[];
+
+    if (guest.platform.isNotEmpty) {
+      parts.add('${guest.invitedVia.label} · ${guest.platform}');
+    }
+
+    // Show last contact info only for unresolved statuses where it's
+    // actually meaningful — no point showing "last contacted Jun 10" for
+    // someone who's already confirmed yes or no.
+    if (_unresolvedStatuses.contains(guest.rsvp)) {
+      if (guest.lastFollowUp == null) {
+        parts.add('never contacted');
+      } else {
+        parts.add('last ${guest.lastFollowUp!.toIsoString()}');
+      }
+    }
+
+    return parts.isEmpty ? null : parts.join(' · ');
   }
 }
 
