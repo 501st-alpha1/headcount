@@ -228,6 +228,48 @@ void main() {
       final parsed = Tag.fromTomlString(tag.toTomlString());
       expect(parsed.levels, ['will_play_anything', 'casual_only', 'pass']);
     });
+
+    test('round-trips dependsOn when set', () {
+      const tag = Tag(
+        id: 'hiking-travel',
+        name: 'Travel distance',
+        levels: ['local_only', 'day_trip', 'overnight'],
+        dependsOn: 'hiking',
+      );
+      final parsed = Tag.fromTomlString(tag.toTomlString());
+      expect(parsed.dependsOn, 'hiking');
+      expect(parsed.isDependent, isTrue);
+      expect(parsed.isRoot, isFalse);
+    });
+
+    test('omits depends_on key entirely when empty (root tag)', () {
+      const tag = Tag(id: 'hiking', name: 'Hiking');
+      expect(tag.toTomlString(), isNot(contains('depends_on')));
+      final parsed = Tag.fromTomlString(tag.toTomlString());
+      expect(parsed.dependsOn, '');
+      expect(parsed.isRoot, isTrue);
+    });
+
+    test('loads a legacy file with no depends_on key as a root tag', () {
+      const legacyToml = '''
+id = "hiking"
+name = "Hiking"
+levels = ["loves_it", "easy_only"]
+''';
+      final parsed = Tag.fromTomlString(legacyToml);
+      expect(parsed.dependsOn, '');
+      expect(parsed.isRoot, isTrue);
+    });
+
+    test('asRoot() clears the dependsOn field', () {
+      const tag = Tag(
+        id: 'hiking-travel',
+        name: 'Travel distance',
+        dependsOn: 'hiking',
+      );
+      expect(tag.asRoot().isRoot, isTrue);
+      expect(tag.asRoot().dependsOn, '');
+    });
   });
 
   group('Group TOML round-trip', () {

@@ -74,6 +74,7 @@ class TagRepository {
     required String name,
     String? id,
     List<String>? levels,
+    String dependsOn = '',
   }) async {
     final existing = await _existingIds();
     final resolvedId = id ?? uniqueSlug(slugify(name), existing);
@@ -86,6 +87,7 @@ class TagRepository {
       id: resolvedId,
       name: name,
       levels: levels ?? Tag.defaultLevels,
+      dependsOn: dependsOn,
     );
     await save(tag);
     return tag;

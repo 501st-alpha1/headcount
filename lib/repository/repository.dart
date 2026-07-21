@@ -142,6 +142,82 @@ class DataSnapshot {
     return result;
   }
 
+  /// All root tags (no dependsOn), sorted alphabetically by name.
+  /// These are what appear as top-level options in the Person Editor
+  /// and as the initial pick in the Interest Browser.
+  List<Tag> get rootTags {
+    final result = tags.where((t) => t.isRoot).toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    return result;
+  }
+
+  /// All tags that declare [tagId] as their parent, sorted alphabetically.
+  /// Used to show the "Refine by…" options in the Interest Browser and
+  /// the "Also add:" suggestions in the Person Editor.
+  List<Tag> dependentsOf(String tagId) {
+    final result = tags.where((t) => t.dependsOn == tagId).toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    return result;
+  }
+
+  /// Whether [tagId] is an ancestor (direct or transitive) of [candidateId].
+  /// Used to prevent circular dependencies when setting dependsOn in the
+  /// Tag Editor.
+  bool isAncestorOf(String tagId, String candidateId) {
+    var current = tagById(candidateId);
+    while (current != null && current.isDependent) {
+      if (current.dependsOn == tagId) return true;
+      current = tagById(current.dependsOn);
+    }
+    return false;
+  }
+
+  /// People who have both [parentTagId] and [subtagId] in their interests,
+  /// each paired with their InterestTag for [subtagId]. Sorted by the
+  /// sub-tag's level order. Used for AND-narrowed filtering in the
+  /// Interest Browser after a refinement sub-tag is selected.
+  List<(Person, InterestTag)> peopleWithTagAndSubtag(
+    String parentTagId,
+    String subtagId,
+  ) {
+    final subtag = tagById(subtagId);
+    final levelRank = <String, int>{
+      if (subtag != null)
+        for (var i = 0; i < subtag.levels.length; i++) subtag.levels[i]: i,
+    };
+
+    final result = <(Person, InterestTag)>[];
+    for (final person in people) {
+      final parentInterest = person.interestIn(parentTagId);
+      final subInterest = person.interestIn(subtagId);
+      if (parentInterest != null && subInterest != null) {
+        result.add((person, subInterest));
+      }
+    }
+    result.sort((a, b) {
+      final rankA = levelRank[a.$2.level] ?? levelRank.length;
+      final rankB = levelRank[b.$2.level] ?? levelRank.length;
+      return rankA.compareTo(rankB);
+    });
+    return result;
+  }
+
+  /// People who have [parentTagId] but have NOT recorded a value for
+  /// [subtagId]. These appear in the "Unknown" section at the bottom of
+  /// the Interest Browser when a refinement sub-tag is active — they
+  /// match the parent but haven't been categorized on the sub-dimension.
+  List<Person> peopleWithParentButNotSubtag(
+    String parentTagId,
+    String subtagId,
+  ) {
+    return people
+        .where((p) =>
+            p.interestIn(parentTagId) != null &&
+            p.interestIn(subtagId) == null)
+        .toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+  }
+
   /// All guests on [event], each paired with the Person they refer to.
   /// Guests whose person_id has no matching Person are silently skipped
   /// (this should never happen in practice — saveEvent rejects dangling

@@ -29,6 +29,9 @@ class TagEditorScreen extends ConsumerStatefulWidget {
 class _TagEditorScreenState extends ConsumerState<TagEditorScreen> {
   late TextEditingController _nameController;
   List<String> _levels = [];
+  /// The staged dependsOn value — empty string means "root tag."
+  /// Applied on Save alongside name and new levels.
+  String _dependsOn = '';
   bool _isSaving = false;
   bool _isInitialized = false;
 
@@ -51,6 +54,7 @@ class _TagEditorScreenState extends ConsumerState<TagEditorScreen> {
     if (_isInitialized) return;
     _nameController.text = tag.name;
     _levels = [...tag.levels];
+    _dependsOn = tag.dependsOn;
     _isInitialized = true;
   }
 

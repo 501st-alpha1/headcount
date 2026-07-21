@@ -10,28 +10,47 @@ import 'package:toml/toml.dart';
 /// anywhere else levels are grouped/displayed. There's no separate
 /// "sortRank" field — position in the list IS the rank, which also means
 /// reordering levels in the editor is just reordering this list.
+///
+/// [dependsOn] is the id of a parent tag, or empty for a root tag. A
+/// dependent tag only makes sense for people who also have the parent —
+/// e.g. "hiking_travel" depends on "hiking". The dependency relationship
+/// lives here on the Tag definition, not on the person's InterestTag
+/// entries, which remain a flat list of tag+level pairs.
 class Tag {
   final String id;
   final String name;
   final List<String> levels;
 
+  /// The id of the parent tag this depends on, or empty string for a
+  /// root tag. Missing from legacy TOML files → treated as empty (root).
+  final String dependsOn;
+
   const Tag({
     required this.id,
     required this.name,
     this.levels = const [],
+    this.dependsOn = '',
   });
+
+  bool get isRoot => dependsOn.isEmpty;
+  bool get isDependent => dependsOn.isNotEmpty;
 
   Tag copyWith({
     String? id,
     String? name,
     List<String>? levels,
+    String? dependsOn,
   }) {
     return Tag(
       id: id ?? this.id,
       name: name ?? this.name,
       levels: levels ?? this.levels,
+      dependsOn: dependsOn ?? this.dependsOn,
     );
   }
+
+  /// Clears the dependsOn field (makes this a root tag).
+  Tag asRoot() => copyWith(dependsOn: '');
 
   /// The default level set seeded for tags created automatically during
   /// migration from the old global InterestLevel enum, or for brand-new
@@ -60,6 +79,9 @@ class Tag {
       'id': id,
       'name': name,
       'levels': levels,
+      // Only write depends_on when non-empty — keeps root tag files clean
+      // and is backward compatible (missing key = root tag on read).
+      if (dependsOn.isNotEmpty) 'depends_on': dependsOn,
     };
   }
 
@@ -74,6 +96,7 @@ class Tag {
       levels: ((map['levels'] as List?) ?? const [])
           .map((l) => l as String)
           .toList(),
+      dependsOn: (map['depends_on'] as String?) ?? '',
     );
   }
 

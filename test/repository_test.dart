@@ -740,6 +740,141 @@ void main() {
     });
   });
 
+  group('DataSnapshot tag dependency queries', () {
+    test('rootTags returns only tags with no dependsOn, sorted by name',
+        () async {
+      await repo.tags.create(name: 'Hiking', id: 'hiking');
+      await repo.tags.create(name: 'Board Games', id: 'board-games');
+      await repo.tags.create(
+        name: 'Travel distance',
+        id: 'hiking-travel',
+        levels: ['local', 'day_trip'],
+      );
+      // Manually set dependsOn since create() doesn't have that param yet.
+      final hikeTravel = await repo.tags.load('hiking-travel');
+      await repo.tags.save(hikeTravel!.copyWith(dependsOn: 'hiking'));
+
+      final snapshot = await repo.loadAll();
+      final rootIds = snapshot.rootTags.map((t) => t.id).toList();
+      expect(rootIds, ['board-games', 'hiking']);
+      expect(rootIds, isNot(contains('hiking-travel')));
+    });
+
+    test('dependentsOf returns tags whose dependsOn matches, sorted by name',
+        () async {
+      await repo.tags.create(name: 'Hiking', id: 'hiking');
+      await repo.tags.save(Tag(
+        id: 'hiking-travel',
+        name: 'Travel distance',
+        levels: ['local', 'day_trip'],
+        dependsOn: 'hiking',
+      ));
+      await repo.tags.save(Tag(
+        id: 'hiking-difficulty',
+        name: 'Difficulty',
+        levels: ['easy', 'hard'],
+        dependsOn: 'hiking',
+      ));
+      await repo.tags.create(name: 'Board Games', id: 'board-games');
+
+      final snapshot = await repo.loadAll();
+      final deps = snapshot.dependentsOf('hiking').map((t) => t.id).toList();
+      expect(deps, ['hiking-difficulty', 'hiking-travel']);
+      expect(snapshot.dependentsOf('board-games'), isEmpty);
+    });
+
+    test('isAncestorOf detects direct and transitive ancestry', () async {
+      await repo.tags.save(
+        const Tag(id: 'hiking', name: 'Hiking'),
+      );
+      await repo.tags.save(
+        const Tag(id: 'hiking-travel', name: 'Travel', dependsOn: 'hiking'),
+      );
+      await repo.tags.save(
+        const Tag(
+            id: 'hiking-travel-mode',
+            name: 'Mode',
+            dependsOn: 'hiking-travel'),
+      );
+
+      final snapshot = await repo.loadAll();
+      // Direct parent.
+      expect(snapshot.isAncestorOf('hiking', 'hiking-travel'), isTrue);
+      // Transitive: hiking is an ancestor of hiking-travel-mode.
+      expect(
+          snapshot.isAncestorOf('hiking', 'hiking-travel-mode'), isTrue);
+      // Not an ancestor.
+      expect(
+          snapshot.isAncestorOf('hiking-travel', 'hiking'), isFalse);
+    });
+
+    test('peopleWithTagAndSubtag returns only people with both tags, '
+        'sorted by sub-tag level order', () async {
+      await repo.tags.save(const Tag(id: 'hiking', name: 'Hiking',
+          levels: ['loves_it', 'easy_only']));
+      await repo.tags.save(const Tag(id: 'hiking-travel', name: 'Travel',
+          levels: ['local', 'day_trip', 'overnight'], dependsOn: 'hiking'));
+
+      // Alice has both hiking and hiking-travel.
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [
+          const InterestTag(tag: 'hiking', level: 'loves_it'),
+          const InterestTag(tag: 'hiking-travel', level: 'day_trip'),
+        ],
+      );
+      // Bob has only hiking (no sub-tag).
+      await repo.people.create(
+        name: 'Bob Smith',
+        interests: [const InterestTag(tag: 'hiking', level: 'easy_only')],
+      );
+      // Carol has both.
+      await repo.people.create(
+        name: 'Carol Diaz',
+        interests: [
+          const InterestTag(tag: 'hiking', level: 'loves_it'),
+          const InterestTag(tag: 'hiking-travel', level: 'overnight'),
+        ],
+      );
+
+      final snapshot = await repo.loadAll();
+      final results =
+          snapshot.peopleWithTagAndSubtag('hiking', 'hiking-travel');
+
+      // Only Alice and Carol (both have hiking and hiking-travel).
+      expect(results, hasLength(2));
+      // Sorted by sub-tag level order: day_trip (index 1) before overnight (index 2).
+      expect(results[0].$1.name, 'Alice Chen');
+      expect(results[1].$1.name, 'Carol Diaz');
+    });
+
+    test('peopleWithParentButNotSubtag returns people with parent only',
+        () async {
+      await repo.tags.save(const Tag(id: 'hiking', name: 'Hiking'));
+      await repo.tags.save(const Tag(
+          id: 'hiking-travel', name: 'Travel', dependsOn: 'hiking'));
+
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [
+          const InterestTag(tag: 'hiking', level: 'loves_it'),
+          const InterestTag(tag: 'hiking-travel', level: 'local'),
+        ],
+      );
+      await repo.people.create(
+        name: 'Bob Smith',
+        interests: [const InterestTag(tag: 'hiking', level: 'easy_only')],
+      );
+
+      final snapshot = await repo.loadAll();
+      final unknown =
+          snapshot.peopleWithParentButNotSubtag('hiking', 'hiking-travel');
+
+      expect(unknown, hasLength(1));
+      expect(unknown.first.name, 'Bob Smith');
+    });
+  });
+
   group('Tag auto-migration on loadAll', () {
     test('creates a Tag definition (with Tag.defaultLevels) for a tag in use '
         'that has no tags/*.toml file yet', () async {
@@ -791,6 +926,166 @@ void main() {
       await repo.tags.create(name: 'Unused Tag', id: 'unused-tag');
       final snapshot = await repo.loadAll();
       expect(snapshot.tagById('unused-tag'), isNotNull);
+    });
+  });
+
+  group('DataSnapshot.rootTags and dependentsOf', () {
+    test('rootTags returns only tags with no dependsOn', () async {
+      await repo.tags.create(name: 'Hiking', id: 'hiking');
+      await repo.tags.create(
+        name: 'Travel distance',
+        id: 'hiking-travel',
+        levels: ['local_only', 'day_trip'],
+      );
+      // Manually save with dependsOn set since create() doesn't take it yet.
+      final travelTag = await repo.tags.load('hiking-travel');
+      await repo.tags.save(travelTag!.copyWith(dependsOn: 'hiking'));
+
+      final snapshot = await repo.loadAll();
+      final rootIds = snapshot.rootTags.map((t) => t.id).toList();
+      expect(rootIds, contains('hiking'));
+      expect(rootIds, isNot(contains('hiking-travel')));
+    });
+
+    test('dependentsOf returns tags whose dependsOn matches', () async {
+      await repo.tags.create(name: 'Hiking', id: 'hiking');
+      await repo.tags.create(name: 'Board Games', id: 'board-games');
+      final travel = await repo.tags.create(
+          name: 'Travel distance', id: 'hiking-travel');
+      await repo.tags.save(travel.copyWith(dependsOn: 'hiking'));
+      final difficulty = await repo.tags.create(
+          name: 'Difficulty', id: 'hiking-difficulty');
+      await repo.tags.save(difficulty.copyWith(dependsOn: 'hiking'));
+
+      final snapshot = await repo.loadAll();
+      final deps = snapshot.dependentsOf('hiking').map((t) => t.id).toList();
+      expect(deps, containsAll(['hiking-travel', 'hiking-difficulty']));
+      expect(snapshot.dependentsOf('board-games'), isEmpty);
+    });
+
+    test('isAncestorOf detects direct and transitive ancestors', () async {
+      await repo.tags.create(name: 'Hiking', id: 'hiking');
+      final travel = await repo.tags.create(
+          name: 'Travel distance', id: 'hiking-travel');
+      await repo.tags.save(travel.copyWith(dependsOn: 'hiking'));
+      final region = await repo.tags.create(
+          name: 'Region', id: 'hiking-travel-region');
+      await repo.tags.save(region.copyWith(dependsOn: 'hiking-travel'));
+
+      final snapshot = await repo.loadAll();
+      // Direct ancestor
+      expect(snapshot.isAncestorOf('hiking', 'hiking-travel'), isTrue);
+      // Transitive ancestor
+      expect(
+          snapshot.isAncestorOf('hiking', 'hiking-travel-region'), isTrue);
+      // Not an ancestor
+      expect(snapshot.isAncestorOf('hiking-travel', 'hiking'), isFalse);
+      expect(snapshot.isAncestorOf('hiking', 'hiking'), isFalse);
+    });
+  });
+
+  group('DataSnapshot.peopleWithTagAndSubtag and peopleWithParentButNotSubtag',
+      () {
+    test('peopleWithTagAndSubtag returns only people with both tags', () async {
+      await repo.tags.create(name: 'Hiking', id: 'hiking');
+      final travel = await repo.tags.create(
+        name: 'Travel distance',
+        id: 'hiking-travel',
+        levels: ['local_only', 'day_trip', 'overnight'],
+      );
+      await repo.tags.save(travel.copyWith(dependsOn: 'hiking'));
+
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [
+          const InterestTag(tag: 'hiking', level: 'loves_it'),
+          const InterestTag(tag: 'hiking-travel', level: 'day_trip'),
+        ],
+      );
+      await repo.people.create(
+        name: 'Bob Smith',
+        interests: [
+          const InterestTag(tag: 'hiking', level: 'loves_it'),
+          // No hiking-travel entry
+        ],
+      );
+      await repo.people.create(
+        name: 'Carol Diaz',
+        interests: [
+          // No hiking entry at all
+          const InterestTag(tag: 'hiking-travel', level: 'overnight'),
+        ],
+      );
+
+      final snapshot = await repo.loadAll();
+      final results =
+          snapshot.peopleWithTagAndSubtag('hiking', 'hiking-travel');
+
+      expect(results, hasLength(1));
+      expect(results.first.$1.name, 'Alice Chen');
+      expect(results.first.$2.level, 'day_trip');
+    });
+
+    test('peopleWithTagAndSubtag sorts by sub-tag level order', () async {
+      await repo.tags.create(name: 'Hiking', id: 'hiking');
+      final travel = await repo.tags.create(
+        name: 'Travel distance',
+        id: 'hiking-travel',
+        levels: ['local_only', 'day_trip', 'overnight'],
+      );
+      await repo.tags.save(travel.copyWith(dependsOn: 'hiking'));
+
+      await repo.people.create(
+        name: 'Bob Smith',
+        interests: [
+          const InterestTag(tag: 'hiking', level: 'loves_it'),
+          const InterestTag(tag: 'hiking-travel', level: 'overnight'),
+        ],
+      );
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [
+          const InterestTag(tag: 'hiking', level: 'loves_it'),
+          const InterestTag(tag: 'hiking-travel', level: 'local_only'),
+        ],
+      );
+
+      final snapshot = await repo.loadAll();
+      final results =
+          snapshot.peopleWithTagAndSubtag('hiking', 'hiking-travel');
+
+      expect(results[0].$1.name, 'Alice Chen'); // local_only = rank 0
+      expect(results[1].$1.name, 'Bob Smith');  // overnight = rank 2
+    });
+
+    test('peopleWithParentButNotSubtag returns people missing the sub-tag',
+        () async {
+      await repo.tags.create(name: 'Hiking', id: 'hiking');
+      final travel = await repo.tags.create(
+          name: 'Travel distance', id: 'hiking-travel');
+      await repo.tags.save(travel.copyWith(dependsOn: 'hiking'));
+
+      await repo.people.create(
+        name: 'Alice Chen',
+        interests: [
+          const InterestTag(tag: 'hiking', level: 'loves_it'),
+          const InterestTag(tag: 'hiking-travel', level: 'day_trip'),
+        ],
+      );
+      await repo.people.create(
+        name: 'Bob Smith',
+        interests: [
+          const InterestTag(tag: 'hiking', level: 'loves_it'),
+          // No hiking-travel
+        ],
+      );
+
+      final snapshot = await repo.loadAll();
+      final unknown =
+          snapshot.peopleWithParentButNotSubtag('hiking', 'hiking-travel');
+
+      expect(unknown, hasLength(1));
+      expect(unknown.first.name, 'Bob Smith');
     });
   });
 
