@@ -82,12 +82,14 @@ class _TagEditorScreenState extends ConsumerState<TagEditorScreen> {
         final updated = latest.copyWith(
           name: _nameController.text.trim(),
           levels: [...reordered, ...newlyAdded],
+          dependsOn: _dependsOn,
         );
         await repository.saveTag(updated);
       } else {
         await repository.tags.create(
           name: _nameController.text.trim(),
           levels: _levels,
+          dependsOn: _dependsOn,
         );
       }
       await ref.read(dataSnapshotProvider.notifier).reload();
@@ -275,15 +277,12 @@ class _TagEditorScreenState extends ConsumerState<TagEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.isEditing) {
-      return _buildForm(context, null);
-    }
-
     final snapshotAsync = ref.watch(dataSnapshotProvider);
     return switch (snapshotAsync) {
       AsyncData(:final value) => _buildForm(
           context,
-          value.tagById(widget.tagId!),
+          widget.isEditing ? value.tagById(widget.tagId!) : null,
+          value,
         ),
       AsyncError(:final error) => Scaffold(
           appBar: AppBar(title: const Text('Edit Tag')),
@@ -296,7 +295,7 @@ class _TagEditorScreenState extends ConsumerState<TagEditorScreen> {
     };
   }
 
-  Widget _buildForm(BuildContext context, Tag? existing) {
+  Widget _buildForm(BuildContext context, Tag? existing, DataSnapshot snapshot) {
     if (widget.isEditing && existing == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('Edit Tag')),
@@ -306,6 +305,16 @@ class _TagEditorScreenState extends ConsumerState<TagEditorScreen> {
     if (existing != null) {
       _initializeFrom(existing);
     }
+
+    // Root tags available as "depends on" options — exclude this tag
+    // itself and any tags that are already ancestors of this tag
+    // (prevents circular dependencies). When creating a new tag, all
+    // root tags are eligible.
+    final eligibleParents = snapshot.rootTags.where((t) {
+      if (existing == null) return true;
+      if (t.id == existing.id) return false;
+      return !snapshot.isAncestorOf(existing.id, t.id);
+    }).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -333,6 +342,36 @@ class _TagEditorScreenState extends ConsumerState<TagEditorScreen> {
                     border: OutlineInputBorder(),
                   ),
                   autofocus: !widget.isEditing,
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'Depends on',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Make this a sub-tag of another tag. Leave empty '
+                  'for a top-level tag.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('None (top-level)'),
+                      selected: _dependsOn.isEmpty,
+                      onSelected: (_) => setState(() => _dependsOn = ''),
+                    ),
+                    for (final parent in eligibleParents)
+                      ChoiceChip(
+                        label: Text(parent.name),
+                        selected: _dependsOn == parent.id,
+                        onSelected: (_) =>
+                            setState(() => _dependsOn = parent.id),
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 24),
                 Row(
