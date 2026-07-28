@@ -310,16 +310,13 @@ class _ResultSectionHeader extends StatelessWidget {
   }
 }
 
-/// Shown when a tag result is tapped: everyone with that interest tag,
-/// grouped by level in the tag's own defined order (most enthusiastic
-/// first, per Tag.levels — see Tag's doc comment). Multi-select via
-/// checkboxes, then "Add Selected" applies them all to the event at once.
-///
-/// Note: levels are now per-tag free strings rather than a fixed enum,
-/// so there's no longer a universal "not interested" value to hide by
-/// default the way the old InterestLevel.notInterested did — everyone
-/// with the tag is shown, just grouped with the tag's own least-
-/// enthusiastic levels last.
+/// Shown when a tag result is tapped. Shows people grouped by their
+/// level on the root tag. If the tag has dependents (sub-tags), shows
+/// "Refine by…" chips — selecting one narrows to people who have BOTH
+/// the root tag AND the sub-tag (AND filtering), grouped by sub-tag
+/// level. People with the root tag but no sub-tag value appear in an
+/// "Unknown" section at the bottom so you know they exist but haven't
+/// been categorized yet.
 class _TagInterestBrowser extends StatefulWidget {
   final Tag tag;
   final DataSnapshot snapshot;
@@ -340,48 +337,58 @@ class _TagInterestBrowser extends StatefulWidget {
 class _TagInterestBrowserState extends State<_TagInterestBrowser> {
   final Set<String> _selected = {};
 
+  /// The active refinement sub-tag, or null for unrefined view.
+  Tag? _activeSubtag;
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final existingIds = widget.event.guests.map((g) => g.personId).toSet();
-    final allMatches = widget.snapshot.peopleWithTag(widget.tag.id);
-    final available =
-        allMatches.where((p) => !existingIds.contains(p.$1.id)).toList();
+    final dependents = widget.snapshot.dependentsOf(widget.tag.id);
 
     return Column(
       children: [
-        Expanded(
-          child: available.isEmpty
-              ? const Center(child: Text('No one left to add.'))
-              : ListView(
+        // "Refine by…" chips — only shown if this tag has dependents.
+        if (dependents.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Refine by', style: theme.textTheme.labelLarge),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
                   children: [
-                    for (final group in _groupByLevel(available))
-                      ...[
-                        _ResultSectionHeader(label: group.$1),
-                        for (final pair in group.$2)
-                          CheckboxListTile(
-                            title: Text(pair.$1.name),
-                            subtitle: pair.$2.notes.isEmpty
-                                ? null
-                                : Text(pair.$2.notes),
-                            value: _selected.contains(pair.$1.id),
-                            onChanged: (checked) => setState(() {
-                              if (checked == true) {
-                                _selected.add(pair.$1.id);
-                              } else {
-                                _selected.remove(pair.$1.id);
-                              }
-                            }),
-                          ),
-                      ],
+                    for (final dep in dependents)
+                      FilterChip(
+                        label: Text(dep.name),
+                        selected: _activeSubtag?.id == dep.id,
+                        onSelected: (selected) => setState(() {
+                          _activeSubtag = selected ? dep : null;
+                          // Clear selection when changing refinement —
+                          // a person selected under one sub-tag filter
+                          // may not be visible under another.
+                          _selected.clear();
+                        }),
+                      ),
                   ],
                 ),
+                const Divider(height: 24),
+              ],
+            ),
+          ),
+        Expanded(
+          child: _activeSubtag == null
+              ? _buildRootView(existingIds)
+              : _buildRefinedView(existingIds, _activeSubtag!),
         ),
         Padding(
           padding: const EdgeInsets.all(16),
           child: FilledButton(
-            onPressed: _selected.isEmpty
-                ? null
-                : () => widget.onAddSelected(_selected),
+            onPressed:
+                _selected.isEmpty ? null : () => widget.onAddSelected(_selected),
             child: Text(
               _selected.isEmpty
                   ? 'Select people to add'
@@ -393,23 +400,126 @@ class _TagInterestBrowserState extends State<_TagInterestBrowser> {
     );
   }
 
-  /// Groups by level following widget.tag.levels' order; anyone whose
-  /// stored level string isn't one of the tag's currently defined levels
-  /// (stale/hand-edited data, or a level deleted without reassignment in
-  /// some edge case) lands in a final "Other" group rather than being
-  /// silently dropped.
+  /// Unrefined view — all available people with this tag, grouped by
+  /// their level on the root tag.
+  Widget _buildRootView(Set<String> existingIds) {
+    final available = widget.snapshot
+        .peopleWithTag(widget.tag.id)
+        .where((p) => !existingIds.contains(p.$1.id))
+        .toList();
+
+    if (available.isEmpty) {
+      return const Center(child: Text('No one left to add.'));
+    }
+
+    return _CheckboxList(
+      groups: _groupByLevel(available, widget.tag),
+      selected: _selected,
+      onToggle: _toggle,
+    );
+  }
+
+  /// Refined view — people who have BOTH the root tag AND the sub-tag,
+  /// grouped by their sub-tag level. An "Unknown" section at the bottom
+  /// shows people with the root tag but no sub-tag value.
+  Widget _buildRefinedView(Set<String> existingIds, Tag subtag) {
+    final withBoth = widget.snapshot
+        .peopleWithTagAndSubtag(widget.tag.id, subtag.id)
+        .where((p) => !existingIds.contains(p.$1.id))
+        .toList();
+
+    final unknown = widget.snapshot
+        .peopleWithParentButNotSubtag(widget.tag.id, subtag.id)
+        .where((p) => !existingIds.contains(p.id))
+        .toList();
+
+    if (withBoth.isEmpty && unknown.isEmpty) {
+      return const Center(child: Text('No one left to add.'));
+    }
+
+    // Build groups from the sub-tag's level order.
+    final groups = _groupByLevel(withBoth, subtag);
+
+    // Add "Unknown" group at the bottom if there are any.
+    if (unknown.isNotEmpty) {
+      groups.add((
+        'Unknown (no ${subtag.name} recorded)',
+        unknown.map((p) => (p, InterestTag(tag: subtag.id, level: ''))).toList(),
+      ));
+    }
+
+    return _CheckboxList(
+      groups: groups,
+      selected: _selected,
+      onToggle: _toggle,
+    );
+  }
+
+  void _toggle(String personId) {
+    setState(() {
+      if (_selected.contains(personId)) {
+        _selected.remove(personId);
+      } else {
+        _selected.add(personId);
+      }
+    });
+  }
+
   List<(String, List<(Person, InterestTag)>)> _groupByLevel(
     List<(Person, InterestTag)> people,
+    Tag tag,
   ) {
     final groups = <(String, List<(Person, InterestTag)>)>[];
-    for (final level in widget.tag.levels) {
+    for (final level in tag.levels) {
       final inGroup = people.where((p) => p.$2.level == level).toList();
       if (inGroup.isNotEmpty) groups.add((level, inGroup));
     }
+    // Anyone whose level isn't in the tag's defined levels (stale data).
     final other = people
-        .where((p) => !widget.tag.levels.contains(p.$2.level))
+        .where((p) => !tag.levels.contains(p.$2.level) && p.$2.level.isNotEmpty)
         .toList();
     if (other.isNotEmpty) groups.add(('Other', other));
     return groups;
+  }
+}
+
+/// Reusable checkbox list for the interest browser — handles both the
+/// root view and the refined sub-tag view.
+class _CheckboxList extends StatelessWidget {
+  final List<(String, List<(Person, InterestTag)>)> groups;
+  final Set<String> selected;
+  final void Function(String personId) onToggle;
+
+  const _CheckboxList({
+    required this.groups,
+    required this.selected,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return ListView(
+      children: [
+        for (final group in groups) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Text(
+              group.$1,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+          for (final pair in group.$2)
+            CheckboxListTile(
+              title: Text(pair.$1.name),
+              subtitle: pair.$2.notes.isEmpty ? null : Text(pair.$2.notes),
+              value: selected.contains(pair.$1.id),
+              onChanged: (_) => onToggle(pair.$1.id),
+            ),
+        ],
+      ],
+    );
   }
 }

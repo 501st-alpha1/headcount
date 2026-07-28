@@ -103,8 +103,7 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
       AsyncData(:final value) => _buildForm(
           context,
           widget.isEditing ? value.personById(widget.personId!) : null,
-          value.allTagsInUse,
-          value.allPlatformsInUse,
+          value,
         ),
       AsyncError(:final error) => Scaffold(
           appBar: AppBar(title: const Text('Edit Person')),
@@ -120,8 +119,7 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
   Widget _buildForm(
     BuildContext context,
     Person? existing,
-    List<Tag> availableTags,
-    List<String> availablePlatforms,
+    DataSnapshot snapshot,
   ) {
     if (widget.isEditing && existing == null) {
       return Scaffold(
@@ -132,6 +130,16 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
     if (existing != null) {
       _initializeFrom(existing);
     }
+
+    // Tags eligible to appear in the interest row chip picker:
+    // - Root tags (always available)
+    // - Dependent tags whose parent the person already has
+    //   (strict enforcement: can't add hiking-travel without hiking)
+    final currentTagIds = _interests.map((i) => i.tag).toSet();
+    final eligibleTags = snapshot.allTagsInUse.where((tag) {
+      if (tag.isRoot) return true;
+      return currentTagIds.contains(tag.dependsOn);
+    }).toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -164,7 +172,7 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
             Text('Platforms', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
             PlatformChipPicker(
-              availablePlatforms: availablePlatforms,
+              availablePlatforms: snapshot.allPlatformsInUse,
               selected: _platforms,
               onChanged: (updated) => setState(() => _platforms = updated),
             ),
@@ -206,14 +214,24 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
               for (final interest in _interests)
                 _EditableInterestRow(
                   interest: interest,
-                  availableTags: availableTags,
+                  availableTags: eligibleTags,
+                  snapshot: snapshot,
                   onChanged: (updated) => setState(() {
                     final index = _interests.indexOf(interest);
                     _interests[index] = updated;
+                    // When a tag is selected or changed, re-check which
+                    // dependent tags are now eligible and drop any that
+                    // no longer have their parent present.
+                    _pruneOrphanedDependents(snapshot);
                   }),
-                  onRemove: () => setState(() {
-                    _interests.remove(interest);
-                  }),
+                  onRemove: () => _removeInterest(interest, snapshot),
+                  onAddDependent: (depTag) {
+                    setState(() {
+                      if (!_interests.any((i) => i.tag == depTag.id)) {
+                        _interests.add(InterestTag(tag: depTag.id, level: ''));
+                      }
+                    });
+                  },
                 ),
           ],
         ),
@@ -226,19 +244,83 @@ class _PersonEditorScreenState extends ConsumerState<PersonEditorScreen> {
       _interests.add(const InterestTag(tag: '', level: ''));
     });
   }
+
+  /// When a parent tag is removed, offer to also remove its dependent
+  /// tags. If the user confirms, removes all dependent tags from
+  /// _interests. If declined, removes only the parent (leaving orphaned
+  /// dependents, which will no longer be editable — they stay in the data
+  /// but don't show in the chip picker).
+  Future<void> _removeInterest(
+      InterestTag interest, DataSnapshot snapshot) async {
+    final dependents = snapshot.dependentsOf(interest.tag);
+    final affectedDeps = _interests
+        .where((i) => dependents.any((d) => d.id == i.tag))
+        .toList();
+
+    if (affectedDeps.isNotEmpty) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Remove tag?'),
+          content: Text(
+            'This person also has sub-tags of "${snapshot.tagById(interest.tag)?.name ?? interest.tag}": '
+            '${affectedDeps.map((i) => snapshot.tagById(i.tag)?.name ?? i.tag).join(', ')}. '
+            'Remove those too?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Keep sub-tags'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Remove all'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      setState(() {
+        if (confirmed == true) {
+          _interests.removeWhere(
+              (i) => i.tag == interest.tag || affectedDeps.any((d) => d.tag == i.tag));
+        } else {
+          _interests.remove(interest);
+        }
+      });
+    } else {
+      setState(() => _interests.remove(interest));
+    }
+  }
+
+  /// Removes any interest entries whose tag depends on a parent the
+  /// person no longer has. Called after any tag change to keep the
+  /// list consistent.
+  void _pruneOrphanedDependents(DataSnapshot snapshot) {
+    final currentTagIds = _interests.map((i) => i.tag).toSet();
+    _interests.removeWhere((i) {
+      final tag = snapshot.tagById(i.tag);
+      if (tag == null || tag.isRoot) return false;
+      return !currentTagIds.contains(tag.dependsOn);
+    });
+  }
 }
 
 class _EditableInterestRow extends ConsumerStatefulWidget {
   final InterestTag interest;
   final List<Tag> availableTags;
+  final DataSnapshot snapshot;
   final void Function(InterestTag) onChanged;
   final VoidCallback onRemove;
+  final void Function(Tag depTag) onAddDependent;
 
   const _EditableInterestRow({
     required this.interest,
     required this.availableTags,
+    required this.snapshot,
     required this.onChanged,
     required this.onRemove,
+    required this.onAddDependent,
   });
 
   @override
@@ -332,6 +414,13 @@ class _EditableInterestRowState extends ConsumerState<_EditableInterestRow> {
       if (selectedTag != null) selectedTag,
     }.toList()
       ..sort((a, b) => a.name.compareTo(b.name));
+
+    // Dependent tags of the currently selected tag — shown as "Also add:"
+    // suggestions. The parent widget's onAddDependent is a no-op if the
+    // person already has that sub-tag, so no filtering needed here.
+    final depSuggestions = selectedTag == null
+        ? <Tag>[]
+        : widget.snapshot.dependentsOf(selectedTag.id);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -431,6 +520,26 @@ class _EditableInterestRowState extends ConsumerState<_EditableInterestRow> {
                     ),
                 ],
               ),
+            // Optional "Also add:" suggestions for dependent tags.
+            if (depSuggestions.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    'Also add:',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  for (final dep in depSuggestions)
+                    ActionChip(
+                      label: Text(dep.name),
+                      onPressed: () => widget.onAddDependent(dep),
+                    ),
+                ],
+              ),
+            ],
             const SizedBox(height: 8),
             TextField(
               controller: _notesController,
@@ -448,8 +557,7 @@ class _EditableInterestRowState extends ConsumerState<_EditableInterestRow> {
   }
 }
 
-/// Manual null-safe "find by id" — avoids depending on package:collection
-/// just for firstOrNull.
+/// Manual null-safe "find by id".
 Tag? _findTagById(List<Tag> tags, String id) {
   for (final tag in tags) {
     if (tag.id == id) return tag;
