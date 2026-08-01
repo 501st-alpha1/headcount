@@ -124,7 +124,17 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
         .where((t) => query.isEmpty || t.name.toLowerCase().contains(query))
         .toList();
 
-    if (matchingPeople.isEmpty && matchingGroups.isEmpty && matchingTags.isEmpty) {
+    // Other events (excluding the current one), sorted most-recent-first.
+    // Guests already on this event are skipped at add time, so no need
+    // to filter the event list here.
+    final matchingEvents = snapshot.events
+        .where((e) => e.id != event.id && e.guests.isNotEmpty)
+        .where((e) => query.isEmpty || e.name.toLowerCase().contains(query))
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+
+    if (matchingPeople.isEmpty && matchingGroups.isEmpty &&
+        matchingTags.isEmpty && matchingEvents.isEmpty) {
       return Center(
         child: Text(
           query.isEmpty ? 'No one left to add.' : 'No matches for "$query".',
@@ -157,6 +167,19 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
               onTap: () => _inviteGroup(event, group),
             ),
         ],
+        if (matchingEvents.isNotEmpty) ...[
+          const _ResultSectionHeader(label: 'From another event'),
+          for (final other in matchingEvents)
+            ListTile(
+              leading: const Icon(Icons.event_outlined),
+              title: Text(other.name),
+              subtitle: Text(
+                '${other.date.toIsoString()} · ${other.guests.length} '
+                '${other.guests.length == 1 ? "guest" : "guests"}',
+              ),
+              onTap: () => _addFromEvent(event, other),
+            ),
+        ],
         if (matchingPeople.isNotEmpty) ...[
           const _ResultSectionHeader(label: 'People'),
           for (final person in matchingPeople)
@@ -173,6 +196,25 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
         ],
       ],
     );
+  }
+
+  /// Adds all guests from [sourceEvent] to [targetEvent] with status
+  /// toInvite. Guests already on [targetEvent] (matched by person_id)
+  /// are silently skipped — same dedup logic as everywhere else.
+  Future<void> _addFromEvent(Event targetEvent, Event sourceEvent) async {
+    final personIds = sourceEvent.guests.map((g) => g.personId).toSet();
+    await _addPeopleByIds(targetEvent, personIds,
+        status: RsvpStatus.toInvite);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Added guests from "${sourceEvent.name}" — '
+            'already-added guests were skipped.',
+          ),
+        ),
+      );
+    }
   }
 
   Event? _findEvent(DataSnapshot snapshot, String id) {

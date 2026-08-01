@@ -605,6 +605,109 @@ void main() {
     });
   });
 
+  group('Add guests from another event', () {
+    test('copies all guests from source event as toInvite with null lastFollowUp',
+        () async {
+      final alice = await repo.people.create(name: 'Alice Chen');
+      final bob = await repo.people.create(name: 'Bob Smith');
+
+      // Source event with two guests.
+      var sourceEvent = await repo.events.create(
+        name: 'Old Hike',
+        date: const SimpleDate(year: 2026, month: 1, day: 1),
+      );
+      sourceEvent = sourceEvent.copyWith(guests: [
+        Guest(personId: alice.id, rsvp: RsvpStatus.yes, invitedVia: InviteMethod.dm),
+        Guest(personId: bob.id, rsvp: RsvpStatus.no, invitedVia: InviteMethod.dm),
+      ]);
+      await repo.saveEvent(sourceEvent);
+
+      // Target event starts empty.
+      final targetEvent = await repo.events.create(
+        name: 'New Hike',
+        date: const SimpleDate(year: 2026, month: 6, day: 1),
+      );
+
+      // Simulate what _addFromEvent does: add all source guests as toInvite.
+      final personIds = sourceEvent.guests.map((g) => g.personId).toSet();
+      final existingIds = targetEvent.guests.map((g) => g.personId).toSet();
+      final newGuests = personIds
+          .where((id) => !existingIds.contains(id))
+          .map((id) => Guest(
+                personId: id,
+                rsvp: RsvpStatus.toInvite,
+                invitedVia: InviteMethod.dm,
+                // toInvite = not yet contacted, lastFollowUp stays null.
+              ))
+          .toList();
+      final updated = targetEvent.copyWith(
+          guests: [...targetEvent.guests, ...newGuests]);
+      await repo.saveEvent(updated);
+
+      final snapshot = await repo.loadAll();
+      final reloaded =
+          snapshot.events.firstWhere((e) => e.id == targetEvent.id);
+      expect(reloaded.guests, hasLength(2));
+      expect(reloaded.guestFor(alice.id)!.rsvp, RsvpStatus.toInvite);
+      expect(reloaded.guestFor(alice.id)!.lastFollowUp, isNull);
+      expect(reloaded.guestFor(bob.id)!.rsvp, RsvpStatus.toInvite);
+    });
+
+    test('skips guests already on the target event', () async {
+      final alice = await repo.people.create(name: 'Alice Chen');
+      final bob = await repo.people.create(name: 'Bob Smith');
+
+      var sourceEvent = await repo.events.create(
+        name: 'Old Hike',
+        date: const SimpleDate(year: 2026, month: 1, day: 1),
+      );
+      sourceEvent = sourceEvent.copyWith(guests: [
+        Guest(personId: alice.id, rsvp: RsvpStatus.yes, invitedVia: InviteMethod.dm),
+        Guest(personId: bob.id, rsvp: RsvpStatus.yes, invitedVia: InviteMethod.dm),
+      ]);
+      await repo.saveEvent(sourceEvent);
+
+      // Target already has Alice with a confirmed status.
+      var targetEvent = await repo.events.create(
+        name: 'New Hike',
+        date: const SimpleDate(year: 2026, month: 6, day: 1),
+      );
+      targetEvent = targetEvent.copyWith(guests: [
+        Guest(
+          personId: alice.id,
+          rsvp: RsvpStatus.yes,
+          invitedVia: InviteMethod.dm,
+          lastFollowUp: SimpleDate.today(),
+        ),
+      ]);
+      await repo.saveEvent(targetEvent);
+
+      // Add from source — Alice should be skipped, Bob added.
+      final personIds = sourceEvent.guests.map((g) => g.personId).toSet();
+      final existingIds = targetEvent.guests.map((g) => g.personId).toSet();
+      final newGuests = personIds
+          .where((id) => !existingIds.contains(id))
+          .map((id) => Guest(
+                personId: id,
+                rsvp: RsvpStatus.toInvite,
+                invitedVia: InviteMethod.dm,
+              ))
+          .toList();
+      final updated = targetEvent.copyWith(
+          guests: [...targetEvent.guests, ...newGuests]);
+      await repo.saveEvent(updated);
+
+      final snapshot = await repo.loadAll();
+      final reloaded =
+          snapshot.events.firstWhere((e) => e.id == targetEvent.id);
+      expect(reloaded.guests, hasLength(2));
+      // Alice's existing status is preserved — not overwritten.
+      expect(reloaded.guestFor(alice.id)!.rsvp, RsvpStatus.yes);
+      // Bob was added as toInvite.
+      expect(reloaded.guestFor(bob.id)!.rsvp, RsvpStatus.toInvite);
+    });
+  });
+
   group('DataSnapshot.allPlatformsInUse', () {
     test('collects distinct platforms from people, sorted alphabetically',
         () async {
