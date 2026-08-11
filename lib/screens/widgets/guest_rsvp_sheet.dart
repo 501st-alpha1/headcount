@@ -59,6 +59,7 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
   late int _followUpCount;
   late SimpleDate? _lastFollowUp;
   late bool _followUpSuppressed;
+  late SimpleDate? _snoozeUntil;
 
   @override
   void initState() {
@@ -72,6 +73,7 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
     _followUpCount = g.followUpCount;
     _lastFollowUp = g.lastFollowUp;
     _followUpSuppressed = g.followUpSuppressed;
+    _snoozeUntil = g.snoozeUntil;
   }
 
   @override
@@ -93,6 +95,8 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
       lastFollowUp: _lastFollowUp,
       clearLastFollowUp: _lastFollowUp == null,
       followUpSuppressed: _followUpSuppressed,
+      snoozeUntil: _snoozeUntil,
+      clearSnooze: _snoozeUntil == null,
     );
   }
 
@@ -272,6 +276,54 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
               ),
               value: _followUpSuppressed,
               onChanged: (value) => setState(() => _followUpSuppressed = value),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _snoozeUntil == null
+                        ? 'Snooze until…'
+                        : 'Snoozed until ${_snoozeUntil!.toIsoString()}',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                if (_snoozeUntil != null)
+                  TextButton(
+                    onPressed: () => setState(() => _snoozeUntil = null),
+                    child: const Text('Clear'),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final now = SimpleDate.today();
+                    final initial = _snoozeUntil != null
+                        ? DateTime(
+                            _snoozeUntil!.year,
+                            _snoozeUntil!.month,
+                            _snoozeUntil!.day,
+                          )
+                        : DateTime.now().add(const Duration(days: 7));
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: initial,
+                      firstDate: DateTime(now.year, now.month, now.day)
+                          .add(const Duration(days: 1)),
+                      lastDate: DateTime(now.year + 5),
+                    );
+                    if (picked != null && mounted) {
+                      setState(() {
+                        _snoozeUntil = SimpleDate(
+                          year: picked.year,
+                          month: picked.month,
+                          day: picked.day,
+                        );
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.event_outlined, size: 18),
+                  label: Text(_snoozeUntil == null ? 'Set date' : 'Change'),
+                ),
+              ],
             ),
 
             const SizedBox(height: 20),

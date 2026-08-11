@@ -30,6 +30,14 @@ class Guest {
   /// status, I've decided not to chase," not a permanent mark.
   final bool followUpSuppressed;
 
+  /// If set and in the future, the guest is excluded from the follow-up
+  /// list until this date — a "snooze" that expires automatically. Once
+  /// today >= snoozeUntil the snooze is treated as expired and normal
+  /// needsFollowUp logic resumes. In the follow-up sort order, a snoozed
+  /// guest sorts as if their last contact was snoozeUntil, so they slot
+  /// in at the right point when the date arrives.
+  final SimpleDate? snoozeUntil;
+
   /// Days that must pass since [lastFollowUp] before a guest in an
   /// unresolved RSVP state is considered due for another follow-up.
   /// Prevents "needs follow-up" from firing again the moment you've
@@ -47,6 +55,7 @@ class Guest {
     this.lastFollowUp,
     this.notes = '',
     this.followUpSuppressed = false,
+    this.snoozeUntil,
   });
 
   Guest copyWith({
@@ -60,6 +69,8 @@ class Guest {
     bool clearLastFollowUp = false,
     String? notes,
     bool? followUpSuppressed,
+    SimpleDate? snoozeUntil,
+    bool clearSnooze = false,
   }) {
     final newRsvp = rsvp ?? this.rsvp;
 
@@ -90,6 +101,7 @@ class Guest {
       followUpSuppressed: suppressionLifted
           ? false
           : (followUpSuppressed ?? this.followUpSuppressed),
+      snoozeUntil: clearSnooze ? null : (snoozeUntil ?? this.snoozeUntil),
     );
   }
 
@@ -99,9 +111,21 @@ class Guest {
   /// the event must be upcoming, the status must be unresolved, and
   /// enough time must have passed since last contact (or there's been
   /// no contact at all).
+  /// Whether this guest is actively snoozed (snooze date set and in the
+  /// future relative to [today]). When snoozed, needsFollowUp returns
+  /// false regardless of status or cooldown.
+  bool isSnoozed({SimpleDate? today}) {
+    if (snoozeUntil == null) return false;
+    final effectiveToday = today ?? SimpleDate.today();
+    return snoozeUntil!.isAfter(effectiveToday);
+  }
+
   bool needsFollowUp(bool eventIsUpcoming, {SimpleDate? today}) {
     if (!eventIsUpcoming) return false;
     if (followUpSuppressed) return false;
+
+    final effectiveToday = today ?? SimpleDate.today();
+    if (isSnoozed(today: effectiveToday)) return false;
 
     final isUnresolved = rsvp == RsvpStatus.toInvite ||
         rsvp == RsvpStatus.noResponse ||
@@ -114,9 +138,16 @@ class Guest {
     // (unless suppressed, which is handled above).
     if (lastFollowUp == null) return true;
 
-    final effectiveToday = today ?? SimpleDate.today();
     final daysSinceContact = lastFollowUp!.daysUntil(effectiveToday);
     return daysSinceContact >= followUpCooldownDays;
+  }
+
+  /// The effective "last contact" date for sort-order purposes in the
+  /// follow-up list. A snoozed guest sorts as if last contacted on
+  /// snoozeUntil, so they slot back in naturally when the date arrives.
+  SimpleDate? effectiveSortDate({SimpleDate? today}) {
+    if (isSnoozed(today: today)) return snoozeUntil;
+    return lastFollowUp;
   }
 
   Map<String, dynamic> toTomlMap() {
@@ -133,6 +164,7 @@ class Guest {
       // Only write the field when true — omitting it (false by default)
       // keeps existing files clean and uncluttered.
       if (followUpSuppressed) 'follow_up_suppressed': true,
+      if (snoozeUntil != null) 'snooze_until': snoozeUntil!.toTomlLocalDate(),
     };
   }
 
@@ -149,6 +181,7 @@ class Guest {
       // Missing key = false (backward compat with existing files).
       followUpSuppressed:
           (map['follow_up_suppressed'] as bool?) ?? false,
+      snoozeUntil: readSimpleDate(map, 'snooze_until', optional: true),
     );
   }
 }

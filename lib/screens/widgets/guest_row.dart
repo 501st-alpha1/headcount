@@ -51,6 +51,20 @@ class GuestRow extends StatelessWidget {
               color: theme.colorScheme.error,
             ),
             const SizedBox(width: 8),
+          ] else if (guest.isSnoozed()) ...[
+            Icon(
+              Icons.event_available_outlined,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+            ),
+            const SizedBox(width: 2),
+            Text(
+              guest.snoozeUntil!.toIsoString(),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+              ),
+            ),
+            const SizedBox(width: 8),
           ] else if (guest.followUpSuppressed) ...[
             // Suppressed — muted icon to show this person is intentionally
             // excluded from the follow-up list without drawing attention.

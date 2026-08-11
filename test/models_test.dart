@@ -718,6 +718,126 @@ notes = ""
     });
   });
 
+  group('Guest.snoozeUntil', () {
+    test('a snoozed guest does not need follow-up while snooze is active', () {
+      const today = SimpleDate(year: 2026, month: 6, day: 1);
+      const snoozeUntil = SimpleDate(year: 2026, month: 6, day: 15);
+      final guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.noResponse,
+        invitedVia: InviteMethod.dm,
+        snoozeUntil: snoozeUntil,
+      );
+      expect(guest.isSnoozed(today: today), isTrue);
+      expect(guest.needsFollowUp(true, today: today), isFalse);
+    });
+
+    test('snooze expires automatically when today >= snoozeUntil', () {
+      const snoozeUntil = SimpleDate(year: 2026, month: 6, day: 15);
+      const afterSnooze = SimpleDate(year: 2026, month: 6, day: 15);
+      final guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.noResponse,
+        invitedVia: InviteMethod.dm,
+        snoozeUntil: snoozeUntil,
+      );
+      // On the snooze date itself, it's expired.
+      expect(guest.isSnoozed(today: afterSnooze), isFalse);
+      expect(guest.needsFollowUp(true, today: afterSnooze), isTrue);
+    });
+
+    test('effectiveSortDate returns snoozeUntil while snoozed', () {
+      const today = SimpleDate(year: 2026, month: 6, day: 1);
+      const snoozeUntil = SimpleDate(year: 2026, month: 6, day: 15);
+      final guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.noResponse,
+        invitedVia: InviteMethod.dm,
+        lastFollowUp: const SimpleDate(year: 2026, month: 5, day: 1),
+        snoozeUntil: snoozeUntil,
+      );
+      expect(guest.effectiveSortDate(today: today), snoozeUntil);
+    });
+
+    test('effectiveSortDate returns lastFollowUp when not snoozed', () {
+      const lastFollowUp = SimpleDate(year: 2026, month: 5, day: 1);
+      final guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.noResponse,
+        invitedVia: InviteMethod.dm,
+        lastFollowUp: lastFollowUp,
+      );
+      expect(guest.effectiveSortDate(), lastFollowUp);
+    });
+
+    test('snoozeUntil round-trips through TOML', () {
+      final event = Event(
+        id: 'e',
+        name: 'E',
+        date: const SimpleDate(year: 2026, month: 1, day: 1),
+        guests: [
+          const Guest(
+            personId: 'p',
+            rsvp: RsvpStatus.noResponse,
+            invitedVia: InviteMethod.dm,
+            snoozeUntil: SimpleDate(year: 2026, month: 6, day: 15),
+          ),
+        ],
+      );
+      final toml = event.toTomlString();
+      expect(toml, contains('snooze_until'));
+      final parsed = Event.fromTomlString(toml);
+      expect(
+        parsed.guestFor('p')!.snoozeUntil,
+        const SimpleDate(year: 2026, month: 6, day: 15),
+      );
+    });
+
+    test('snoozeUntil omitted from TOML when null (backward compat)', () {
+      final event = Event(
+        id: 'e',
+        name: 'E',
+        date: const SimpleDate(year: 2026, month: 1, day: 1),
+        guests: [
+          const Guest(
+            personId: 'p',
+            rsvp: RsvpStatus.noResponse,
+            invitedVia: InviteMethod.dm,
+          ),
+        ],
+      );
+      expect(event.toTomlString(), isNot(contains('snooze_until')));
+    });
+
+    test('a legacy file with no snooze_until loads as null', () {
+      const legacyToml = '''
+id = "e"
+name = "E"
+date = 2026-01-01
+
+[[guests]]
+person_id = "p"
+rsvp = "no_response"
+invited_via = "dm"
+platform = ""
+follow_up_count = 0
+notes = ""
+''';
+      final event = Event.fromTomlString(legacyToml);
+      expect(event.guestFor('p')!.snoozeUntil, isNull);
+    });
+
+    test('clearSnooze = true in copyWith clears the snooze date', () {
+      const guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.noResponse,
+        invitedVia: InviteMethod.dm,
+        snoozeUntil: SimpleDate(year: 2026, month: 6, day: 15),
+      );
+      expect(guest.copyWith(clearSnooze: true).snoozeUntil, isNull);
+    });
+  });
+
   group('Event.showsOnHomeScreen', () {
     test('an upcoming pinned event shows on the home screen', () {
       final event = Event(

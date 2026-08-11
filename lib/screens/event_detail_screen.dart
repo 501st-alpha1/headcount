@@ -98,12 +98,15 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
     final List<(String, List<(Guest, Person)>)> grouped;
     if (_filter == _GuestFilter.needsFollowUp) {
       final sorted = [...filtered]..sort((a, b) {
-          final aDate = a.$1.lastFollowUp;
-          final bDate = b.$1.lastFollowUp;
+          // Sort by effectiveSortDate: snoozed guests use their snooze
+          // date (so they slot back in when the date arrives), others use
+          // lastFollowUp. Null = never contacted = top of list.
+          final aDate = a.$1.effectiveSortDate();
+          final bDate = b.$1.effectiveSortDate();
           if (aDate == null && bDate == null) return 0;
           if (aDate == null) return -1; // never contacted → first
           if (bDate == null) return 1;
-          return aDate.compareTo(bDate); // oldest contact first
+          return aDate.compareTo(bDate); // oldest effective contact first
         });
       grouped = sorted.isEmpty ? [] : [('Unresolved — oldest contact first', sorted)];
     } else {
