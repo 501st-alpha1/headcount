@@ -53,6 +53,14 @@ class EventDetailScreen extends ConsumerStatefulWidget {
 
 class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
   _GuestFilter _filter = _GuestFilter.all;
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,7 +96,18 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
     }
 
     final resolved = dataSnapshot.resolvedGuestsFor(event);
-    final filtered = _applyFilter(resolved, event);
+
+    // Apply search query first, then filter/group.
+    final searched = _searchQuery.isEmpty
+        ? resolved
+        : resolved
+            .where((p) => p.$2.name
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase()))
+            .toList();
+
+    final filtered = _applyFilter(searched, event);
+    final counts = _computeCounts(searched, event);
 
     // The "Needs follow-up" filter shows all unresolved guests sorted by
     // oldest contact first (null = never contacted = top of list), so you
@@ -137,15 +156,46 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
             child: _EventMetaHeader(event: event),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search guests',
+                prefixIcon: const Icon(Icons.search),
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                suffixIcon: _searchQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () => setState(() {
+                          _searchController.clear();
+                          _searchQuery = '';
+                        }),
+                      ),
+              ),
+              onChanged: (v) => setState(() => _searchQuery = v),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: _FilterChipsRow(
               selected: _filter,
+              counts: counts,
               onSelected: (f) => setState(() => _filter = f),
             ),
           ),
           Expanded(
             child: grouped.isEmpty
-                ? const Center(child: Text('No guests match this filter.'))
+                ? Center(
+                    child: Text(
+                      _searchQuery.isEmpty
+                          ? 'No guests match this filter.'
+                          : 'No results for "$_searchQuery".',
+                    ),
+                  )
                 : ListView(
                     children: [
                       for (final group in grouped) ...[
@@ -181,6 +231,33 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
         child: const Icon(Icons.person_add_outlined),
       ),
     );
+  }
+
+  /// Counts per filter chip, computed from the searched (pre-filter) list
+  /// so chips always show how many guests match the current search.
+  Map<_GuestFilter, int> _computeCounts(
+    List<(Guest, Person)> searched,
+    Event event,
+  ) {
+    final counts = <_GuestFilter, int>{};
+    counts[_GuestFilter.all] = searched.length;
+    counts[_GuestFilter.needsFollowUp] =
+        searched.where((p) => p.$1.needsFollowUp(event.isUpcoming)).length;
+    counts[_GuestFilter.toInvite] =
+        searched.where((p) => p.$1.rsvp == RsvpStatus.toInvite).length;
+    counts[_GuestFilter.yes] =
+        searched.where((p) => p.$1.rsvp == RsvpStatus.yes).length;
+    counts[_GuestFilter.probably] =
+        searched.where((p) => p.$1.rsvp == RsvpStatus.probably).length;
+    counts[_GuestFilter.maybe] =
+        searched.where((p) => p.$1.rsvp == RsvpStatus.maybe).length;
+    counts[_GuestFilter.probablyNot] =
+        searched.where((p) => p.$1.rsvp == RsvpStatus.probablyNot).length;
+    counts[_GuestFilter.no] =
+        searched.where((p) => p.$1.rsvp == RsvpStatus.no).length;
+    counts[_GuestFilter.noResponse] =
+        searched.where((p) => p.$1.rsvp == RsvpStatus.noResponse).length;
+    return counts;
   }
 
   List<(Guest, Person)> _applyFilter(
@@ -295,9 +372,14 @@ class _EventMetaHeader extends StatelessWidget {
 
 class _FilterChipsRow extends StatelessWidget {
   final _GuestFilter selected;
+  final Map<_GuestFilter, int> counts;
   final void Function(_GuestFilter) onSelected;
 
-  const _FilterChipsRow({required this.selected, required this.onSelected});
+  const _FilterChipsRow({
+    required this.selected,
+    required this.counts,
+    required this.onSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -311,7 +393,9 @@ class _FilterChipsRow extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: ChoiceChip(
-                label: Text(filter.label),
+                label: Text(
+                  '${filter.label} (${counts[filter] ?? 0})',
+                ),
                 selected: selected == filter,
                 onSelected: (_) => onSelected(filter),
               ),
