@@ -116,11 +116,19 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
       ..sort((a, b) => a.name.compareTo(b.name));
 
     final matchingGroups = snapshot.groups
+        .where(
+          (g) => g.memberIds.any((id) => !existingIds.contains(id)),
+        )
         .where((g) => query.isEmpty || g.name.toLowerCase().contains(query))
         .toList()
       ..sort((a, b) => a.name.compareTo(b.name));
 
     final matchingTags = snapshot.allTagsInUse
+        .where(
+          (t) => snapshot
+          .peopleWithTag(t.id)
+          .any((pair) => !existingIds.contains(pair.$1.id)),
+        )
         .where((t) => query.isEmpty || t.name.toLowerCase().contains(query))
         .toList();
 
