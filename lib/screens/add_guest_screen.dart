@@ -311,6 +311,7 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
     RsvpStatus status = RsvpStatus.toInvite,
   }) async {
     final existingIds = event.guests.map((g) => g.personId).toSet();
+
     final newGuests = personIds
         .where((id) => !existingIds.contains(id))
         .map((id) => Guest(
@@ -331,12 +332,75 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
 
     final repository = ref.read(repositoryProvider);
     final updated = event.copyWith(guests: [...event.guests, ...newGuests]);
+
     await repository.saveEvent(updated);
     await ref.read(dataSnapshotProvider.notifier).reload();
 
-    if (mounted && _browsingTag != null) {
+    if (!mounted) return;
+
+    if (_browsingTag != null) {
       setState(() => _browsingTag = null);
+      return;
     }
+
+    if (_query.trim().isNotEmpty) {
+      final snapshot = ref.read(dataSnapshotProvider).value;
+      if (snapshot != null) {
+        final updatedEvent = _findEvent(snapshot, event.id);
+        if (updatedEvent != null) {
+          final hasResults = _hasSearchResults(
+            snapshot,
+            updatedEvent,
+            _query,
+          );
+
+          if (!hasResults) {
+            setState(() {
+                _query = '';
+                _searchController.clear();
+            });
+          }
+        }
+      }
+    }
+  }
+
+  bool _hasSearchResults(
+    DataSnapshot snapshot,
+    Event event,
+    String rawQuery,
+  ) {
+    final existingIds = event.guests.map((g) => g.personId).toSet();
+    final query = rawQuery.trim().toLowerCase();
+
+    final hasPeople = snapshot.people.any(
+      (p) =>
+      !existingIds.contains(p.id) &&
+      (query.isEmpty || p.name.toLowerCase().contains(query)),
+    );
+
+    final hasGroups = snapshot.groups.any(
+      (g) =>
+      g.memberIds.any((id) => !existingIds.contains(id)) &&
+      (query.isEmpty || g.name.toLowerCase().contains(query)),
+    );
+
+    final hasTags = snapshot.allTagsInUse.any(
+      (t) =>
+      snapshot
+      .peopleWithTag(t.id)
+      .any((pair) => !existingIds.contains(pair.$1.id)) &&
+      (query.isEmpty || t.name.toLowerCase().contains(query)),
+    );
+
+    final hasEvents = snapshot.events.any(
+      (e) =>
+      e.id != event.id &&
+      e.guests.isNotEmpty &&
+      (query.isEmpty || e.name.toLowerCase().contains(query)),
+    );
+
+    return hasPeople || hasGroups || hasTags || hasEvents;
   }
 }
 
