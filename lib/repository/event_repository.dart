@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import '../models/event.dart';
+import '../models/event_question.dart';
 import '../models/simple_date.dart';
 import '../models/slug.dart';
 import 'exceptions.dart';
@@ -123,21 +124,26 @@ class EventRepository {
     String? id,
     String description = '',
     bool pinned = true,
+    List<EventQuestion> questions = const [],
   }) async {
     final existing = await _existingIds();
     final resolvedId = id ?? uniqueSlug(slugify(name), existing);
+
     if (existing.contains(resolvedId)) {
       throw DuplicateIdException(
         'An event with id "$resolvedId" already exists.',
       );
     }
+
     final event = Event(
       id: resolvedId,
       name: name,
       date: date,
       description: description,
       pinned: pinned,
+      questions: questions,
     );
+
     await save(event);
     return event;
   }
