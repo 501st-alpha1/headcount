@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/guest.dart';
 import '../models/event.dart';
 import '../models/event_question.dart';
 import '../models/simple_date.dart';
