@@ -257,8 +257,11 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
     EventQuestion? question,
     Event event,
   ) async {
+    // This might need UI handling, not sure.
+    if (question == null) return;
+
     final hasAnswers = (event?.guests ?? const <Guest>[]).any(
-      (guest) => guest.answers.containsKey(question.id),
+      (guest) => guest.answers.containsKey(question!.id),
     );
 
     if (hasAnswers) {
@@ -275,7 +278,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
     }
 
     setState(() {
-        _questions.removeWhere((q) => q.id == question.id);
+        _questions.removeWhere((q) => q.id == question!.id);
     });
   }
 
