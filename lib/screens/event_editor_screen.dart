@@ -180,77 +180,13 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
 
   Future<(String, EventQuestionType)?> _showQuestionDialog([
       EventQuestion? question,
-  ]) async {
-    final controller = TextEditingController(text: question?.label ?? '');
-    var type = question?.type ?? EventQuestionType.checkbox;
-
-    final result = await showDialog<(String, EventQuestionType)>(
+  ]) {
+    return showDialog<(String, EventQuestionType)>(
       context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text(
-                question == null ? 'Add question' : 'Edit question',
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: controller,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Question',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<EventQuestionType>(
-                    value: type,
-                    decoration: const InputDecoration(
-                      labelText: 'Answer type',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: EventQuestionType.checkbox,
-                        child: Text('Checkbox'),
-                      ),
-                      DropdownMenuItem(
-                        value: EventQuestionType.text,
-                        child: Text('Text'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setDialogState(() => type = value);
-                      }
-                    },
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    final label = controller.text.trim();
-                    if (label.isEmpty) return;
-                    Navigator.pop(context, (label, type));
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (context) => _QuestionDialog(
+        question: question,
+      ),
     );
-
-    controller.dispose();
-    return result;
   }
 
   Future<void> _deleteQuestion(
@@ -395,6 +331,102 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _QuestionDialog extends StatefulWidget {
+  final EventQuestion? question;
+
+  const _QuestionDialog({
+    this.question,
+  });
+
+  @override
+  State<_QuestionDialog> createState() => _QuestionDialogState();
+}
+
+class _QuestionDialogState extends State<_QuestionDialog> {
+  late final TextEditingController _controller;
+  late EventQuestionType _type;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = TextEditingController(
+      text: widget.question?.label ?? '',
+    );
+    _type = widget.question?.type ?? EventQuestionType.checkbox;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        widget.question == null ? 'Add question' : 'Edit question',
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Question',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 16),
+          DropdownButtonFormField<EventQuestionType>(
+            initialValue: _type,
+            decoration: const InputDecoration(
+              labelText: 'Answer type',
+              border: OutlineInputBorder(),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: EventQuestionType.checkbox,
+                child: Text('Checkbox'),
+              ),
+              DropdownMenuItem(
+                value: EventQuestionType.text,
+                child: Text('Text answer'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value != null) {
+                setState(() => _type = value);
+              }
+            },
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final label = _controller.text.trim();
+
+            if (label.isEmpty) return;
+
+            Navigator.pop(
+              context,
+              (label, _type),
+            );
+          },
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }
