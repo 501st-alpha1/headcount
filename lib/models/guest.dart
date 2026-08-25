@@ -38,6 +38,10 @@ class Guest {
   /// in at the right point when the date arrives.
   final SimpleDate? snoozeUntil;
 
+  // Keys are EventQuestion IDs. Checkbox answers are "true"/"false";
+  // text questions contain their text directly.
+  final Map<String, String> answers;
+
   /// Days that must pass since [lastFollowUp] before a guest in an
   /// unresolved RSVP state is considered due for another follow-up.
   /// Prevents "needs follow-up" from firing again the moment you've
@@ -56,6 +60,7 @@ class Guest {
     this.notes = '',
     this.followUpSuppressed = false,
     this.snoozeUntil,
+    this.answers = const {},
   });
 
   Guest copyWith({
@@ -71,6 +76,7 @@ class Guest {
     bool? followUpSuppressed,
     SimpleDate? snoozeUntil,
     bool clearSnooze = false,
+    Map<String, String>? answers,
   }) {
     final newRsvp = rsvp ?? this.rsvp;
 
@@ -102,6 +108,7 @@ class Guest {
           ? false
           : (followUpSuppressed ?? this.followUpSuppressed),
       snoozeUntil: clearSnooze ? null : (snoozeUntil ?? this.snoozeUntil),
+      answers: answers ?? this.answers,
     );
   }
 
@@ -165,10 +172,18 @@ class Guest {
       // keeps existing files clean and uncluttered.
       if (followUpSuppressed) 'follow_up_suppressed': true,
       if (snoozeUntil != null) 'snooze_until': snoozeUntil!.toTomlLocalDate(),
+      if (answers.isNotEmpty) 'answers': answers,
     };
   }
 
   factory Guest.fromTomlMap(Map<String, dynamic> map) {
+    final rawAnswers = map['answers'];
+    final answers = rawAnswers is Map
+        ? rawAnswers.map(
+            (key, value) => MapEntry(key.toString(), value.toString()),
+          )
+        : <String, String>{};
+
     return Guest(
       personId: map['person_id'] as String,
       rsvp: RsvpStatus.fromToml(map['rsvp'] as String),
@@ -182,6 +197,7 @@ class Guest {
       followUpSuppressed:
           (map['follow_up_suppressed'] as bool?) ?? false,
       snoozeUntil: readSimpleDate(map, 'snooze_until', optional: true),
+      answers: answers,
     );
   }
 }

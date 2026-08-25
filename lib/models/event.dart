@@ -1,5 +1,6 @@
 import 'package:toml/toml.dart';
 
+import 'event_question.dart';
 import 'enums.dart';
 import 'guest.dart';
 import 'simple_date.dart';
@@ -14,6 +15,7 @@ class Event {
   final String description;
   final bool pinned;
   final List<Guest> guests;
+  final List<EventQuestion> questions;
 
   const Event({
     required this.id,
@@ -22,6 +24,7 @@ class Event {
     this.description = '',
     this.pinned = true,
     this.guests = const [],
+    this.questions = const [],
   });
 
   Event copyWith({
@@ -31,6 +34,7 @@ class Event {
     String? description,
     bool? pinned,
     List<Guest>? guests,
+    List<EventQuestion>? questions,
   }) {
     return Event(
       id: id ?? this.id,
@@ -39,6 +43,7 @@ class Event {
       description: description ?? this.description,
       pinned: pinned ?? this.pinned,
       guests: guests ?? this.guests,
+      questions: questions ?? this.questions,
     );
   }
 
@@ -111,6 +116,8 @@ class Event {
       'description': description,
       'pinned': pinned,
       'guests': guests.map((g) => g.toTomlMap()).toList(),
+      if (questions.isNotEmpty)
+        'questions': questions.map((q) => q.toTomlMap()).toList(),
     };
   }
 
@@ -120,6 +127,8 @@ class Event {
 
   factory Event.fromTomlMap(Map<String, dynamic> map) {
     final rawGuests = (map['guests'] as List?) ?? const [];
+    final rawQuestions = (map['questions'] as List?) ?? const [];
+
     return Event(
       id: map['id'] as String,
       name: map['name'] as String,
@@ -128,6 +137,13 @@ class Event {
       pinned: (map['pinned'] as bool?) ?? true,
       guests: rawGuests
           .map((g) => Guest.fromTomlMap(g as Map<String, dynamic>))
+          .toList(),
+      questions: rawQuestions
+          .map(
+            (q) => EventQuestion.fromTomlMap(
+              q as Map<String, dynamic>,
+            ),
+          )
           .toList(),
     );
   }
