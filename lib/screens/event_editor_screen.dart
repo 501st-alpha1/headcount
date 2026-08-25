@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../models/event.dart';
+import '../models/event_question.dart';
 import '../models/simple_date.dart';
 import '../providers/data_providers.dart';
 import '../repository/repository.dart';
@@ -25,6 +27,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
   late TextEditingController _descriptionController;
+  List<EventQuestion> _questions = [];
   SimpleDate _date = SimpleDate.today();
   bool _pinned = true;
   bool _isSaving = false;
@@ -50,6 +53,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
     _descriptionController.text = event.description;
     _date = event.date;
     _pinned = event.pinned;
+    _questions = [...event.questions];
     _isInitialized = true;
   }
 
@@ -86,6 +90,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
           date: _date,
           description: _descriptionController.text.trim(),
           pinned: _pinned,
+          questions: _questions,
         );
         await repository.saveEvent(updated, previous: existing);
       } else {
@@ -94,6 +99,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
           date: _date,
           description: _descriptionController.text.trim(),
           pinned: _pinned,
+          questions: _questions,
         );
       }
       await ref.read(dataSnapshotProvider.notifier).reload();
@@ -137,6 +143,139 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
       if (event.id == id) return event;
     }
     return null;
+  }
+
+  Future<void> _addQuestion() async {
+    final result = await _showQuestionDialog();
+
+    if (result == null) return;
+
+    setState(() {
+        _questions.add(
+          EventQuestion(
+            id: const Uuid().v4(),
+            label: result.$1,
+            type: result.$2,
+          ),
+        );
+    });
+  }
+
+  Future<void> _editQuestion(EventQuestion question) async {
+    final result = await _showQuestionDialog(question);
+
+    if (result == null) return;
+
+    setState(() {
+        final index = _questions.indexWhere((q) => q.id == question.id);
+        if (index == -1) return;
+
+        _questions[index] = question.copyWith(
+          label: result.$1,
+          type: result.$2,
+        );
+    });
+  }
+
+  Future<(String, EventQuestionType)?> _showQuestionDialog([
+      EventQuestion? question,
+  ]) async {
+    final controller = TextEditingController(text: question?.label ?? '');
+    var type = question?.type ?? EventQuestionType.checkbox;
+
+    final result = await showDialog<(String, EventQuestionType)>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(
+                question == null ? 'Add question' : 'Edit question',
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Question',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<EventQuestionType>(
+                    value: type,
+                    decoration: const InputDecoration(
+                      labelText: 'Answer type',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: EventQuestionType.checkbox,
+                        child: Text('Checkbox'),
+                      ),
+                      DropdownMenuItem(
+                        value: EventQuestionType.text,
+                        child: Text('Text'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setDialogState(() => type = value);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final label = controller.text.trim();
+                    if (label.isEmpty) return;
+                    Navigator.pop(context, (label, type));
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+    return result;
+  }
+
+  Future<void> _deleteQuestion(
+    EventQuestion? question,
+    Event event,
+  ) async {
+    final hasAnswers = (event?.guests ?? const <Guest>[]).any(
+      (guest) => guest.answers.containsKey(question.id),
+    );
+
+    if (hasAnswers) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'This question cannot be deleted because guests have answers.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+        _questions.removeWhere((q) => q.id == question.id);
+    });
   }
 
   Widget _buildForm(BuildContext context, Event? existing) {
@@ -208,6 +347,46 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
               ),
               value: _pinned,
               onChanged: (value) => setState(() => _pinned = value),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Guest questions',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _addQuestion,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add'),
+                ),
+              ],
+            ),
+            if (_questions.isEmpty)
+            Text(
+              'Optional questions you can track for each guest.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            )
+            else
+            ..._questions.map(
+              (question) => Card(
+                child: ListTile(
+                  title: Text(question.label),
+                  subtitle: Text(
+                    question.type == EventQuestionType.checkbox
+                    ? 'Checkbox'
+                    : 'Text answer',
+                  ),
+                  onTap: () => _editQuestion(question),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    tooltip: 'Delete question',
+                    onPressed: () => _deleteQuestion(question, existing!),
+                  ),
+                ),
+              ),
             ),
           ],
         ),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/enums.dart';
 import '../models/event.dart';
+import '../models/event_question.dart';
 import '../models/guest.dart';
 import '../models/person.dart';
 import '../providers/data_providers.dart';
@@ -324,6 +325,7 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
       context: context,
       guest: guest,
       person: person,
+      questions: event.questions,
       onSave: (updated) => _saveGuestUpdate(event, updated),
       onRemoveFromEvent: () => _removeGuest(event, guest),
     );

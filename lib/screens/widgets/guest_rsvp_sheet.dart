@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/enums.dart';
+import '../../models/event_question.dart';
 import '../../models/guest.dart';
 import '../../models/person.dart';
 import '../../models/simple_date.dart';
@@ -17,6 +18,7 @@ Future<void> showGuestRsvpSheet({
   required BuildContext context,
   required Guest guest,
   required Person person,
+  required List<EventQuestion> questions,
   required void Function(Guest updated) onSave,
   required void Function() onRemoveFromEvent,
 }) {
@@ -26,6 +28,7 @@ Future<void> showGuestRsvpSheet({
     builder: (context) => _GuestRsvpSheetContent(
       initialGuest: guest,
       person: person,
+      questions: questions,
       onSave: onSave,
       onRemoveFromEvent: onRemoveFromEvent,
     ),
@@ -35,12 +38,14 @@ Future<void> showGuestRsvpSheet({
 class _GuestRsvpSheetContent extends StatefulWidget {
   final Guest initialGuest;
   final Person person;
+  final List<EventQuestion> questions;
   final void Function(Guest updated) onSave;
   final void Function() onRemoveFromEvent;
 
   const _GuestRsvpSheetContent({
     required this.initialGuest,
     required this.person,
+    required this.questions,
     required this.onSave,
     required this.onRemoveFromEvent,
   });
@@ -60,11 +65,15 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
   late SimpleDate? _lastFollowUp;
   late bool _followUpSuppressed;
   late SimpleDate? _snoozeUntil;
+  late Map<String, String> _answers;
+  final Map<String, TextEditingController> _answerControllers = {};
 
   @override
   void initState() {
     super.initState();
+
     final g = widget.initialGuest;
+
     _rsvp = g.rsvp;
     _invitedVia = g.invitedVia;
     _platformController = TextEditingController(text: g.platform);
@@ -74,6 +83,15 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
     _lastFollowUp = g.lastFollowUp;
     _followUpSuppressed = g.followUpSuppressed;
     _snoozeUntil = g.snoozeUntil;
+    _answers = {...g.answers};
+
+    for (final question in widget.questions) {
+      if (question.type == EventQuestionType.text) {
+        _answerControllers[question.id] = TextEditingController(
+          text: _answers[question.id] ?? '',
+        );
+      }
+    }
   }
 
   @override
@@ -81,10 +99,29 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
     _platformController.dispose();
     _declinedReasonController.dispose();
     _notesController.dispose();
+
+    for (final controller in _answerControllers.values) {
+      controller.dispose();
+    }
+
     super.dispose();
   }
 
   Guest _buildUpdatedGuest() {
+    final answers = <String, String>{..._answers};
+
+    for (final question in widget.questions) {
+      if (question.type == EventQuestionType.text) {
+        final value = _answerControllers[question.id]!.text.trim();
+
+        if (value.isEmpty) {
+          answers.remove(question.id);
+        } else {
+          answers[question.id] = value;
+        }
+      }
+    }
+
     return widget.initialGuest.copyWith(
       rsvp: _rsvp,
       invitedVia: _invitedVia,
@@ -97,6 +134,7 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
       followUpSuppressed: _followUpSuppressed,
       snoozeUntil: _snoozeUntil,
       clearSnooze: _snoozeUntil == null,
+      answers: answers,
     );
   }
 
@@ -128,6 +166,7 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
         RsvpStatus.probably,
         RsvpStatus.probablyNot,
       };
+
       if (unresolved.contains(status) && status != widget.initialGuest.rsvp) {
         _followUpSuppressed = false;
       }
@@ -156,210 +195,256 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
         ],
       ),
     );
+
     if (confirmed == true && context.mounted) {
       widget.onRemoveFromEvent();
       Navigator.of(context).pop();
     }
   }
 
+  Widget _buildQuestions(BuildContext context) {
+    if (widget.questions.isEmpty) return const SizedBox.shrink();
+
+    final theme = Theme.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        Text('Event details', style: theme.textTheme.labelLarge),
+        const SizedBox(height: 8),
+        for (final question in widget.questions)
+          switch (question.type) {
+            EventQuestionType.checkbox => CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(question.label),
+                value: _answers[question.id] == 'true',
+                onChanged: (value) {
+                  setState(() {
+                    if (value == true) {
+                      _answers[question.id] = 'true';
+                    } else {
+                      _answers.remove(question.id);
+                    }
+                  });
+                },
+              ),
+            EventQuestionType.text => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TextField(
+                  controller: _answerControllers[question.id],
+                  decoration: InputDecoration(
+                    labelText: question.label,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ),
+          },
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 20,
-        bottom: 20 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    widget.person.name,
-                    style: theme.textTheme.titleLarge,
+    return SafeArea(
+      child: Stack(
+        children: [
+          Padding(
+            padding: EdgeInsets.only(
+              left: 20,
+              right: 20,
+              top: 20,
+              bottom: 88 + MediaQuery.of(context).viewInsets.bottom,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.person.name,
+                          style: theme.textTheme.titleLarge,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.person_outline),
+                        tooltip: 'View person',
+                        onPressed: () {
+                          // Navigation to PersonDetailScreen is wired up once
+                          // that screen exists; left as a no-op stub for now.
+                        },
+                      ),
+                    ],
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.person_outline),
-                  tooltip: 'View person',
-                  onPressed: () {
-                    // Navigation to PersonDetailScreen is wired up once
-                    // that screen exists; left as a no-op stub for now.
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
+                  const SizedBox(height: 16),
+                  Text('RSVP', style: theme.textTheme.labelLarge),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: RsvpStatus.values.map((status) {
+                      return ChoiceChip(
+                        label: Text(status.label),
+                        selected: _rsvp == status,
+                        onSelected: (_) => _onRsvpChanged(status),
+                      );
+                    }).toList(),
+                  ),
+                  if (_rsvp == RsvpStatus.no) ...[
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _declinedReasonController,
+                      decoration: const InputDecoration(
+                        labelText: 'Reason (optional)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  Text('Invited via', style: theme.textTheme.labelLarge),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: InviteMethod.values.map((method) {
+                      return ChoiceChip(
+                        label: Text(method.label),
+                        selected: _invitedVia == method,
+                        onSelected: (_) => setState(() => _invitedVia = method),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _platformController,
+                    decoration: const InputDecoration(
+                      labelText: 'Platform (e.g. Signal, iMessage)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text('Follow-up', style: theme.textTheme.labelLarge),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _followUpCount == 0
+                              ? 'No follow-ups yet'
+                              : '$_followUpCount follow-up${_followUpCount == 1 ? '' : 's'}'
+                                  '${_lastFollowUp != null ? ' · last ${_lastFollowUp!.toIsoString()}' : ''}',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _incrementFollowUp,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Log follow-up'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Follow-up not required'),
+                    subtitle: const Text(
+                      'Exclude from the follow-up list regardless of status.',
+                    ),
+                    value: _followUpSuppressed,
+                    onChanged: (value) => setState(() => _followUpSuppressed = value),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _snoozeUntil == null
+                              ? 'Snooze until…'
+                              : 'Snoozed until ${_snoozeUntil!.toIsoString()}',
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ),
+                      if (_snoozeUntil != null)
+                        TextButton(
+                          onPressed: () => setState(() => _snoozeUntil = null),
+                          child: const Text('Clear'),
+                        ),
+                      OutlinedButton.icon(
+                        onPressed: () async {
+                          final now = SimpleDate.today();
+                          final initial = _snoozeUntil != null
+                              ? DateTime(
+                                  _snoozeUntil!.year,
+                                  _snoozeUntil!.month,
+                                  _snoozeUntil!.day,
+                                )
+                              : DateTime.now().add(const Duration(days: 7));
 
-            Text('RSVP', style: theme.textTheme.labelLarge),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: RsvpStatus.values.map((status) {
-                return ChoiceChip(
-                  label: Text(status.label),
-                  selected: _rsvp == status,
-                  onSelected: (_) => _onRsvpChanged(status),
-                );
-              }).toList(),
-            ),
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: initial,
+                            firstDate: DateTime(now.year, now.month, now.day)
+                                .add(const Duration(days: 1)),
+                            lastDate: DateTime(now.year + 5),
+                          );
 
-            if (_rsvp == RsvpStatus.no) ...[
-              const SizedBox(height: 16),
-              TextField(
-                controller: _declinedReasonController,
-                decoration: const InputDecoration(
-                  labelText: 'Reason (optional)',
-                  border: OutlineInputBorder(),
-                ),
+                          if (picked != null && mounted) {
+                            setState(() {
+                              _snoozeUntil = SimpleDate(
+                                year: picked.year,
+                                month: picked.month,
+                                day: picked.day,
+                              );
+                            });
+                          }
+                        },
+                        icon: const Icon(Icons.event_outlined, size: 18),
+                        label: Text(_snoozeUntil == null ? 'Set date' : 'Change'),
+                      ),
+                    ],
+                  ),
+                  _buildQuestions(context),
+                  const SizedBox(height: 20),
+                  TextField(
+                    controller: _notesController,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes for this event',
+                      border: OutlineInputBorder(),
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  TextButton.icon(
+                    onPressed: _confirmRemove,
+                    icon: Icon(
+                      Icons.person_remove_outlined,
+                      color: theme.colorScheme.error,
+                    ),
+                    label: Text(
+                      'Remove from event',
+                      style: TextStyle(color: theme.colorScheme.error),
+                    ),
+                  ),
+                ],
               ),
-            ],
-
-            const SizedBox(height: 20),
-            Text('Invited via', style: theme.textTheme.labelLarge),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: InviteMethod.values.map((method) {
-                return ChoiceChip(
-                  label: Text(method.label),
-                  selected: _invitedVia == method,
-                  onSelected: (_) => setState(() => _invitedVia = method),
-                );
-              }).toList(),
             ),
-
-            const SizedBox(height: 16),
-            TextField(
-              controller: _platformController,
-              decoration: const InputDecoration(
-                labelText: 'Platform (e.g. Signal, iMessage)',
-                border: OutlineInputBorder(),
-              ),
+          ),
+          Positioned(
+            right: 20,
+            bottom: 16,
+            child: FloatingActionButton.extended(
+              onPressed: _save,
+              icon: const Icon(Icons.save_outlined),
+              label: const Text('Save'),
             ),
-
-            const SizedBox(height: 20),
-            Text('Follow-up', style: theme.textTheme.labelLarge),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Text(
-                  _followUpCount == 0
-                      ? 'No follow-ups yet'
-                      : '$_followUpCount follow-up${_followUpCount == 1 ? '' : 's'}'
-                          '${_lastFollowUp != null ? ' · last ${_lastFollowUp!.toIsoString()}' : ''}',
-                  style: theme.textTheme.bodyMedium,
-                ),
-                const Spacer(),
-                OutlinedButton.icon(
-                  onPressed: _incrementFollowUp,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Log follow-up'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Follow-up not required'),
-              subtitle: const Text(
-                'Exclude from the follow-up list regardless of status.',
-              ),
-              value: _followUpSuppressed,
-              onChanged: (value) => setState(() => _followUpSuppressed = value),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    _snoozeUntil == null
-                        ? 'Snooze until…'
-                        : 'Snoozed until ${_snoozeUntil!.toIsoString()}',
-                    style: theme.textTheme.bodyMedium,
-                  ),
-                ),
-                if (_snoozeUntil != null)
-                  TextButton(
-                    onPressed: () => setState(() => _snoozeUntil = null),
-                    child: const Text('Clear'),
-                  ),
-                OutlinedButton.icon(
-                  onPressed: () async {
-                    final now = SimpleDate.today();
-                    final initial = _snoozeUntil != null
-                        ? DateTime(
-                            _snoozeUntil!.year,
-                            _snoozeUntil!.month,
-                            _snoozeUntil!.day,
-                          )
-                        : DateTime.now().add(const Duration(days: 7));
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: initial,
-                      firstDate: DateTime(now.year, now.month, now.day)
-                          .add(const Duration(days: 1)),
-                      lastDate: DateTime(now.year + 5),
-                    );
-                    if (picked != null && mounted) {
-                      setState(() {
-                        _snoozeUntil = SimpleDate(
-                          year: picked.year,
-                          month: picked.month,
-                          day: picked.day,
-                        );
-                      });
-                    }
-                  },
-                  icon: const Icon(Icons.event_outlined, size: 18),
-                  label: Text(_snoozeUntil == null ? 'Set date' : 'Change'),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-            TextField(
-              controller: _notesController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                labelText: 'Notes for this event',
-                border: OutlineInputBorder(),
-                alignLabelWithHint: true,
-              ),
-            ),
-
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                TextButton.icon(
-                  onPressed: _confirmRemove,
-                  icon: Icon(
-                    Icons.person_remove_outlined,
-                    color: theme.colorScheme.error,
-                  ),
-                  label: Text(
-                    'Remove from event',
-                    style: TextStyle(color: theme.colorScheme.error),
-                  ),
-                ),
-                const Spacer(),
-                FilledButton(
-                  onPressed: _save,
-                  child: const Text('Save'),
-                ),
-              ],
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
