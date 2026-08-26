@@ -5,6 +5,7 @@ import '../../models/event_question.dart';
 import '../../models/guest.dart';
 import '../../models/person.dart';
 import '../../models/simple_date.dart';
+import 'platform_chip_picker.dart';
 
 /// Bottom sheet for editing one guest's RSVP record on an event: status,
 /// invite method/platform, follow-up count, last follow-up date, and
@@ -19,6 +20,7 @@ Future<void> showGuestRsvpSheet({
   required Guest guest,
   required Person person,
   required List<EventQuestion> questions,
+  required List<String> availablePlatforms,
   required void Function(Guest updated) onSave,
   required void Function() onRemoveFromEvent,
 }) {
@@ -31,6 +33,7 @@ Future<void> showGuestRsvpSheet({
       questions: questions,
       onSave: onSave,
       onRemoveFromEvent: onRemoveFromEvent,
+      availablePlatforms: availablePlatforms,
     ),
   );
 }
@@ -39,6 +42,7 @@ class _GuestRsvpSheetContent extends StatefulWidget {
   final Guest initialGuest;
   final Person person;
   final List<EventQuestion> questions;
+  final List<String> availablePlatforms;
   final void Function(Guest updated) onSave;
   final void Function() onRemoveFromEvent;
 
@@ -48,6 +52,7 @@ class _GuestRsvpSheetContent extends StatefulWidget {
     required this.questions,
     required this.onSave,
     required this.onRemoveFromEvent,
+    required this.availablePlatforms,
   });
 
   @override
@@ -58,7 +63,6 @@ class _GuestRsvpSheetContent extends StatefulWidget {
 class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
   late RsvpStatus _rsvp;
   late InviteMethod _invitedVia;
-  late TextEditingController _platformController;
   late TextEditingController _declinedReasonController;
   late TextEditingController _notesController;
   late int _followUpCount;
@@ -67,6 +71,7 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
   late SimpleDate? _snoozeUntil;
   late Map<String, String> _answers;
   final Map<String, TextEditingController> _answerControllers = {};
+  late String _platform;
 
   @override
   void initState() {
@@ -76,7 +81,6 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
 
     _rsvp = g.rsvp;
     _invitedVia = g.invitedVia;
-    _platformController = TextEditingController(text: g.platform);
     _declinedReasonController = TextEditingController(text: g.declinedReason);
     _notesController = TextEditingController(text: g.notes);
     _followUpCount = g.followUpCount;
@@ -84,6 +88,7 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
     _followUpSuppressed = g.followUpSuppressed;
     _snoozeUntil = g.snoozeUntil;
     _answers = {...g.answers};
+    _platform = g.platform;
 
     for (final question in widget.questions) {
       if (question.type == EventQuestionType.text) {
@@ -96,7 +101,6 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
 
   @override
   void dispose() {
-    _platformController.dispose();
     _declinedReasonController.dispose();
     _notesController.dispose();
 
@@ -125,7 +129,7 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
     return widget.initialGuest.copyWith(
       rsvp: _rsvp,
       invitedVia: _invitedVia,
-      platform: _platformController.text.trim(),
+      platform: _platform,
       declinedReason: _declinedReasonController.text.trim(),
       notes: _notesController.text.trim(),
       followUpCount: _followUpCount,
@@ -320,12 +324,18 @@ class _GuestRsvpSheetContentState extends State<_GuestRsvpSheetContent> {
                     }).toList(),
                   ),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _platformController,
-                    decoration: const InputDecoration(
-                      labelText: 'Platform (e.g. Signal, iMessage)',
-                      border: OutlineInputBorder(),
-                    ),
+                  PlatformChipPicker(
+                    availablePlatforms: widget.availablePlatforms,
+                    selected: _platform.isEmpty ? {} : {_platform},
+                    multiSelect: false,
+                    preferredPlatforms: widget.person.platforms.toSet(),
+                    showNew: false,
+                    allowNone: true,
+                    onChanged: (selected) {
+                      setState(() {
+                          _platform = selected.isEmpty ? '' : selected.first;
+                      });
+                    },
                   ),
                   const SizedBox(height: 20),
                   Text('Follow-up', style: theme.textTheme.labelLarge),

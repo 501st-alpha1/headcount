@@ -209,6 +209,7 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
                                 pair.$1.needsFollowUp(event!.isUpcoming),
                             onTap: () => _openRsvpSheet(
                               context,
+                              dataSnapshot,
                               event!,
                               pair.$1,
                               pair.$2,
@@ -317,6 +318,7 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
 
   void _openRsvpSheet(
     BuildContext context,
+    DataSnapshot snapshot,
     Event event,
     Guest guest,
     Person person,
@@ -326,6 +328,7 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
       guest: guest,
       person: person,
       questions: event.questions,
+      availablePlatforms: snapshot.allPlatformsInUse,
       onSave: (updated) => _saveGuestUpdate(event, updated),
       onRemoveFromEvent: () => _removeGuest(event, guest),
     );

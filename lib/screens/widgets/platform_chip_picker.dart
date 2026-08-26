@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// A row of selectable platform chips (e.g. "Signal", "Instagram") plus
-/// an inline "+ New" chip for adding one that doesn't exist yet. Used by
-/// both PersonEditorScreen (multi-select) and GroupEditorScreen
-/// (single-select for the group's default platform) — [multiSelect]
-/// switches between the two behaviors.
+/// Selectable platform chips used anywhere platforms need to be chosen.
 ///
 /// This widget is intentionally dumb: it doesn't know about Repository
 /// or persistence. A newly-typed platform is just added to [selected]
@@ -14,10 +10,21 @@ import 'package:flutter/material.dart';
 /// aren't their own model — they're just strings that happen to be
 /// reused across people/groups, same spirit as tags but without a
 /// dedicated definition file).
+///
+/// [multiSelect] controls whether multiple platforms can be selected.
+/// [preferredPlatforms] can be supplied to visually emphasize the platforms
+/// associated with a particular person. Other platforms remain selectable but
+/// are dimmed.
+///
+/// [showNew] controls whether the inline "New" chip is shown.
+/// [allowNone] adds a "None" chip for single-select usage.
 class PlatformChipPicker extends StatefulWidget {
   final List<String> availablePlatforms;
   final Set<String> selected;
   final bool multiSelect;
+  final Set<String> preferredPlatforms;
+  final bool showNew;
+  final bool allowNone;
   final void Function(Set<String> selected) onChanged;
 
   const PlatformChipPicker({
@@ -26,6 +33,9 @@ class PlatformChipPicker extends StatefulWidget {
     required this.selected,
     required this.onChanged,
     this.multiSelect = true,
+    this.preferredPlatforms = const {},
+    this.showNew = true,
+    this.allowNone = false,
   });
 
   @override
@@ -50,6 +60,7 @@ class _PlatformChipPickerState extends State<PlatformChipPicker> {
 
   void _toggle(String platform) {
     final updated = {...widget.selected};
+
     if (widget.multiSelect) {
       if (updated.contains(platform)) {
         updated.remove(platform);
@@ -61,7 +72,12 @@ class _PlatformChipPickerState extends State<PlatformChipPicker> {
         ..clear()
         ..add(platform);
     }
+
     widget.onChanged(updated);
+  }
+
+  void _selectNone() {
+    widget.onChanged({});
   }
 
   void _startCreatingNew() {
@@ -73,9 +89,11 @@ class _PlatformChipPickerState extends State<PlatformChipPicker> {
 
   void _confirmNew() {
     final name = _newPlatformController.text.trim();
+
     if (name.isNotEmpty) {
       _toggle(name);
     }
+
     setState(() => _creatingNew = false);
   }
 
@@ -95,39 +113,53 @@ class _PlatformChipPickerState extends State<PlatformChipPicker> {
       spacing: 8,
       runSpacing: 8,
       children: [
-        for (final platform in chipOptions)
+        if (widget.allowNone && !widget.multiSelect)
           ChoiceChip(
-            label: Text(platform),
-            selected: widget.selected.contains(platform),
-            onSelected: (_) => _toggle(platform),
+            label: const Text('None'),
+            selected: widget.selected.isEmpty,
+            onSelected: (_) => _selectNone(),
           ),
-        if (_creatingNew)
-          SizedBox(
-            width: 140,
-            child: TextField(
-              controller: _newPlatformController,
-              autofocus: true,
-              decoration: const InputDecoration(
-                hintText: 'New platform',
-                isDense: true,
-                border: OutlineInputBorder(),
-              ),
-              onSubmitted: (_) => _confirmNew(),
+        for (final platform in chipOptions)
+          Opacity(
+            opacity: widget.preferredPlatforms.isEmpty ||
+                    widget.preferredPlatforms.contains(platform)
+                ? 1.0
+                : 0.45,
+            child: ChoiceChip(
+              label: Text(platform),
+              selected: widget.selected.contains(platform),
+              onSelected: (_) => _toggle(platform),
             ),
-          )
-        else
-          ActionChip(
-            avatar: const Icon(Icons.add, size: 18),
-            label: const Text('New'),
-            onPressed: _startCreatingNew,
           ),
-        if (_creatingNew)
-          IconButton(
-            icon: const Icon(Icons.check),
-            tooltip: 'Confirm new platform',
-            onPressed: _confirmNew,
-            visualDensity: VisualDensity.compact,
-          ),
+        if (widget.showNew) ...[
+          if (_creatingNew)
+            SizedBox(
+              width: 140,
+              child: TextField(
+                controller: _newPlatformController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'New platform',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: (_) => _confirmNew(),
+              ),
+            )
+          else
+            ActionChip(
+              avatar: const Icon(Icons.add, size: 18),
+              label: const Text('New'),
+              onPressed: _startCreatingNew,
+            ),
+          if (_creatingNew)
+            IconButton(
+              icon: const Icon(Icons.check),
+              tooltip: 'Confirm new platform',
+              onPressed: _confirmNew,
+              visualDensity: VisualDensity.compact,
+            ),
+        ],
       ],
     );
   }
