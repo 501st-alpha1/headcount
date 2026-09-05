@@ -7,11 +7,12 @@ import 'simple_date.dart';
 import 'toml_codec.dart';
 
 /// An event you're tracking RSVPs for.
-/// Stored at events/<YYYY>/<MM>/<YYYY-MM-DD>-<id>.toml.
+/// Dated events are stored at events/<YYYY>/<MM>/<YYYY-MM-DD>-<id>.toml.
+/// Undated events are stored at events/undated/<id>.toml.
 class Event {
   final String id;
   final String name;
-  final SimpleDate date;
+  final SimpleDate? date;
   final String description;
   final bool pinned;
   final List<Guest> guests;
@@ -20,7 +21,7 @@ class Event {
   const Event({
     required this.id,
     required this.name,
-    required this.date,
+    this.date,
     this.description = '',
     this.pinned = true,
     this.guests = const [],
@@ -31,6 +32,7 @@ class Event {
     String? id,
     String? name,
     SimpleDate? date,
+    bool clearDate = false,
     String? description,
     bool? pinned,
     List<Guest>? guests,
@@ -39,7 +41,7 @@ class Event {
     return Event(
       id: id ?? this.id,
       name: name ?? this.name,
-      date: date ?? this.date,
+      date: clearDate ? null : (date ?? this.date),
       description: description ?? this.description,
       pinned: pinned ?? this.pinned,
       guests: guests ?? this.guests,
@@ -47,8 +49,9 @@ class Event {
     );
   }
 
-  /// True if this event's date is today or in the future.
-  bool get isUpcoming => !date.isBefore(SimpleDate.today());
+  /// True if this event has a date and that date is today or in the future.
+  bool get isUpcoming =>
+      date != null && !date!.isBefore(SimpleDate.today());
 
   /// Number of days the home screen keeps showing a pinned event after
   /// its date has passed, before it's treated as archived. This is a
@@ -64,19 +67,27 @@ class Event {
   bool get showsOnHomeScreen {
     if (!pinned) return false;
     if (isUpcoming) return true;
-    return date.daysUntil(SimpleDate.today()) <= homeScreenGraceDays;
+    if (date == null) return false;
+    return date!.daysUntil(SimpleDate.today()) <= homeScreenGraceDays;
   }
 
-  /// Two-digit zero-padded month, e.g. "06".
-  String get _monthSegment => date.month.toString().padLeft(2, '0');
+  /// True if this event has no date and is pinned.
+  bool get showsAsUndatedOnHomeScreen => pinned && date == null;
 
   /// The filename for this event, e.g. "2026-08-15-summer-picnic.toml".
-  String get filename => '${date.toIsoString()}-$id.toml';
+  String get filename =>
+      date == null ? '$id.toml' : '${date!.toIsoString()}-$id.toml';
 
   /// The relative path (from the data root) for this event's file, e.g.
   /// "events/2026/08/2026-08-15-summer-picnic.toml".
-  String get relativePath =>
-      'events/${date.year}/$_monthSegment/$filename';
+  String get relativePath {
+    if (date == null) {
+      return 'events/undated/$filename';
+    }
+
+    final month = date!.month.toString().padLeft(2, '0');
+    return 'events/${date!.year}/$month/$filename';
+  }
 
   /// All guests on this event currently flagged as needing follow-up,
   /// per Guest.needsFollowUp.
@@ -112,7 +123,7 @@ class Event {
     return {
       'id': id,
       'name': name,
-      'date': date.toTomlLocalDate(),
+      if (date != null) 'date': date!.toTomlLocalDate(),
       'description': description,
       'pinned': pinned,
       'guests': guests.map((g) => g.toTomlMap()).toList(),
@@ -132,7 +143,7 @@ class Event {
     return Event(
       id: map['id'] as String,
       name: map['name'] as String,
-      date: readSimpleDate(map, 'date')!,
+      date: readSimpleDate(map, 'date', optional: true),
       description: (map['description'] as String?) ?? '',
       pinned: (map['pinned'] as bool?) ?? true,
       guests: rawGuests

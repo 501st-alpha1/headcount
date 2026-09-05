@@ -29,7 +29,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
   late TextEditingController _nameController;
   late TextEditingController _descriptionController;
   List<EventQuestion> _questions = [];
-  SimpleDate _date = SimpleDate.today();
+  SimpleDate? _date;
   bool _pinned = true;
   bool _isSaving = false;
   bool _isInitialized = false;
@@ -59,15 +59,22 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
   }
 
   Future<void> _pickDate() async {
-    final initial = DateTime(_date.year, _date.month, _date.day);
+    final today = SimpleDate.today();
+    final initial = _date ?? today;
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: initial,
+      initialDate: DateTime(
+        initial.year,
+        initial.month,
+        initial.day,
+      ),
       // A wide range: this app has no inherent floor/ceiling on event
       // dates (you might log a past gathering, or plan far ahead).
       firstDate: DateTime(initial.year - 5),
       lastDate: DateTime(initial.year + 5),
     );
+
     if (picked != null) {
       setState(() {
         _date = SimpleDate(year: picked.year, month: picked.month, day: picked.day);
@@ -89,6 +96,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
         final updated = existing.copyWith(
           name: _nameController.text.trim(),
           date: _date,
+          clearDate: _date == null,
           description: _descriptionController.text.trim(),
           pinned: _pinned,
           questions: _questions,
@@ -259,12 +267,18 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
             InkWell(
               onTap: _pickDate,
               child: InputDecorator(
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Date',
-                  border: OutlineInputBorder(),
-                  suffixIcon: Icon(Icons.calendar_today_outlined),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: _date == null
+                      ? const Icon(Icons.calendar_today_outlined)
+                      : IconButton(
+                        icon: const Icon(Icons.clear),
+                        tooltip: 'Clear date',
+                        onPressed: () => setState(() => _date = null),
+                      ),
                 ),
-                child: Text(_date.toIsoString()),
+                child: Text(_date?.toIsoString() ?? 'No date'),
               ),
             ),
             const SizedBox(height: 16),

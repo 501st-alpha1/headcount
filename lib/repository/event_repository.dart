@@ -120,7 +120,7 @@ class EventRepository {
   /// of identity).
   Future<Event> create({
     required String name,
-    required SimpleDate date,
+    SimpleDate? date,
     String? id,
     String description = '',
     bool pinned = true,

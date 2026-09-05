@@ -43,7 +43,13 @@ class EventCard extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                _formatDate(event.date.year, event.date.month, event.date.day),
+                event.date == null
+                    ? 'No date yet'
+                    : _formatDate(
+                      event.date!.year,
+                      event.date!.month,
+                      event.date!.day,
+                    ),
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),

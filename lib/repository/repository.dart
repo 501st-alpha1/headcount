@@ -64,13 +64,26 @@ class DataSnapshot {
     return result;
   }
 
-  /// Events that currently belong on the home screen — pinned and either
-  /// upcoming or still within the post-event grace period — sorted by
-  /// date ascending (soonest first). See Event.showsOnHomeScreen for the
-  /// exact rule.
+  /// Normal (dated) events that currently belong on the home screen —
+  /// pinned and either upcoming or still within the post-event grace
+  /// period — sorted by date ascending (soonest first). See
+  /// Event.showsOnHomeScreen for the exact rule.
   List<Event> get eventsOnHomeScreen {
     final result = events.where((e) => e.showsOnHomeScreen).toList();
-    result.sort((a, b) => a.date.compareTo(b.date));
+
+    result.sort((a, b) => a.date!.compareTo(b.date!));
+
+    return result;
+  }
+
+  /// Events with no date yet that should still appear on home screen.
+  List<Event> get undatedEventsOnHomeScreen {
+    final result = events
+      .where((e) => e.showsAsUndatedOnHomeScreen)
+      .toList();
+
+    result.sort((a, b) => a.name.compareTo(b.name));
+
     return result;
   }
 
@@ -79,8 +92,19 @@ class DataSnapshot {
   /// date descending (most recent first), since that's the more useful
   /// order when scrolling back through history.
   List<Event> get archivedEvents {
-    final result = events.where((e) => !e.showsOnHomeScreen).toList();
-    result.sort((a, b) => b.date.compareTo(a.date));
+    final result = events
+        .where((e) => !e.showsOnHomeScreen &&
+                      !e.showsAsUndatedOnHomeScreen).toList();
+
+    result.sort((a, b) {
+        if (a.date == null && b.date == null) {
+          return a.name.compareTo(b.name);
+        }
+        if (a.date == null) return 1;
+        if (b.date == null) return -1;
+        return b.date!.compareTo(a.date!);
+    });
+
     return result;
   }
 

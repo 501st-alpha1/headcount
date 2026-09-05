@@ -86,6 +86,7 @@ class HomeScreen extends ConsumerWidget {
       body: switch (snapshotAsync) {
         AsyncData(:final value) => _HomeBody(
             events: value.eventsOnHomeScreen,
+            undatedEvents: value.undatedEventsOnHomeScreen,
             issues: value.issues,
           ),
         AsyncError(:final error) => _ErrorState(error: error),
@@ -108,38 +109,67 @@ class HomeScreen extends ConsumerWidget {
 
 class _HomeBody extends StatelessWidget {
   final List<Event> events;
+  final List<Event> undatedEvents;
   final List<LoadIssue> issues;
 
-  const _HomeBody({required this.events, required this.issues});
+  const _HomeBody({
+    required this.events,
+    required this.undatedEvents,
+    required this.issues,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final hasEvents = events.isNotEmpty || undatedEvents.isNotEmpty;
+
     return Column(
       children: [
         LoadIssuesBanner(issues: issues),
         Expanded(
-          child: events.isEmpty
+          child: !hasEvents
               ? const _EmptyState()
-              : ListView.builder(
+              : ListView(
                   padding: const EdgeInsets.all(16),
-                  itemCount: events.length,
-                  itemBuilder: (context, index) {
-                    final event = events[index];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: EventCard(
-                        event: event,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  EventDetailScreen(eventId: event.id),
-                            ),
-                          );
-                        },
+                  children: [
+                    for (final event in events)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: EventCard(
+                          event: event,
+                          onTap: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    EventDetailScreen(eventId: event.id),
+                              ),
+                            );
+                          },
+                        ),
                       ),
-                    );
-                  },
+                    if (undatedEvents.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        'No date yet',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 8),
+                      for (final event in undatedEvents)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: EventCard(
+                            event: event,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      EventDetailScreen(eventId: event.id),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                    ],
+                  ],
                 ),
         ),
       ],
