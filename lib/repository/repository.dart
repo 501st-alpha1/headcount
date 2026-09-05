@@ -87,10 +87,9 @@ class DataSnapshot {
     return result;
   }
 
-  /// Everything that does NOT currently show on the home screen: unpinned
-  /// events, and pinned events whose grace period has expired. Sorted by
-  /// date descending (most recent first), since that's the more useful
-  /// order when scrolling back through history.
+  /// Everything that does NOT currently show on the home screen: i.e.
+  /// unpinned events. Sorted by date descending (most recent first), since
+  /// that's the more useful order when scrolling back through history.
   List<Event> get archivedEvents {
     final result = events
         .where((e) => !e.showsOnHomeScreen &&

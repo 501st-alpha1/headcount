@@ -297,7 +297,7 @@ class _EventEditorScreenState extends ConsumerState<EventEditorScreen> {
               contentPadding: EdgeInsets.zero,
               title: const Text('Pinned'),
               subtitle: const Text(
-                'Show on the home screen (until a few days after the event)',
+                'Keep this event visible on the home screen',
               ),
               value: _pinned,
               onChanged: (value) => setState(() => _pinned = value),

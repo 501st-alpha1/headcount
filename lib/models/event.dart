@@ -53,23 +53,10 @@ class Event {
   bool get isUpcoming =>
       date != null && !date!.isBefore(SimpleDate.today());
 
-  /// Number of days the home screen keeps showing a pinned event after
-  /// its date has passed, before it's treated as archived. This is a
-  /// grace period for "did everyone show up?" / final headcount glances
-  /// — not a setting, just a constant, so it's easy to find and tune.
-  static const int homeScreenGraceDays = 3;
-
-  /// True if this event should appear on the home screen right now.
-  /// This is computed from [pinned] and [date] rather than stored, so an
-  /// event automatically drops off the home screen a few days after it
-  /// happens without any write needing to happen — "pinned" in the file
-  /// just means "I want this visible up front," and time does the rest.
-  bool get showsOnHomeScreen {
-    if (!pinned) return false;
-    if (isUpcoming) return true;
-    if (date == null) return false;
-    return date!.daysUntil(SimpleDate.today()) <= homeScreenGraceDays;
-  }
+  /// True if this event should appear in the main home-screen event list.
+  ///
+  /// Pinned events stay here indefinitely until manually unpinned.
+  bool get showsOnHomeScreen => pinned && date != null;
 
   /// True if this event has no date and is pinned.
   bool get showsAsUndatedOnHomeScreen => pinned && date == null;
