@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/person.dart';
 import '../providers/data_providers.dart';
 import 'person_detail_screen.dart';
+import 'person_follow_up_screen.dart';
 import 'person_editor_screen.dart';
 
 /// All people, grouped under A–Z section headers by first letter of
@@ -95,6 +96,21 @@ class _PeopleListScreenState extends ConsumerState<PeopleListScreen> {
                               subtitle: person.platforms.isEmpty
                                   ? null
                                   : Text(person.platforms.join(', ')),
+                              trailing: IconButton(
+                                icon: const Icon(
+                                    Icons.notifications_outlined),
+                                tooltip: 'Follow up',
+                                visualDensity: VisualDensity.compact,
+                                onPressed: () {
+                                  Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => PersonFollowUpScreen(
+                                        personId: person.id,
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                               onTap: () {
                                 Navigator.of(context).push(
                                   MaterialPageRoute(

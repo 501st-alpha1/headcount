@@ -7,13 +7,14 @@ import '../repository/load_result.dart';
 import 'archive_screen.dart';
 import 'event_detail_screen.dart';
 import 'event_editor_screen.dart';
+import 'global_follow_up_screen.dart';
 import 'groups_list_screen.dart';
 import 'people_list_screen.dart';
 import 'tags_list_screen.dart';
 import 'widgets/event_card.dart';
 import 'widgets/load_issues_banner.dart';
 
-enum _HomeMenuAction { people, groups, tags, archive }
+enum _HomeMenuAction { people, groups, tags, followUp, archive }
 
 /// The app's home screen: pinned events (upcoming, or recently past and
 /// still within the grace period), soonest first, with a way to reach
@@ -35,6 +36,7 @@ class HomeScreen extends ConsumerWidget {
                 _HomeMenuAction.people => const PeopleListScreen(),
                 _HomeMenuAction.groups => const GroupsListScreen(),
                 _HomeMenuAction.tags => const TagsListScreen(),
+                _HomeMenuAction.followUp => const GlobalFollowUpScreen(),
                 _HomeMenuAction.archive => const ArchiveScreen(),
               };
               Navigator.of(context).push(
@@ -61,6 +63,13 @@ class HomeScreen extends ConsumerWidget {
                 child: ListTile(
                   leading: Icon(Icons.interests_outlined),
                   title: Text('Tags'),
+                ),
+              ),
+              PopupMenuItem(
+                value: _HomeMenuAction.followUp,
+                child: ListTile(
+                  leading: Icon(Icons.notifications_outlined),
+                  title: Text('Follow-up list'),
                 ),
               ),
               PopupMenuItem(

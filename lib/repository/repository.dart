@@ -244,6 +244,71 @@ class DataSnapshot {
     }
     return result;
   }
+
+  /// All pinned events (regardless of date — pinned = actively managed),
+  /// sorted by date descending so the most relevant are first.
+  List<Event> get pinnedEvents {
+    final result = events.where((e) => e.pinned).toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    return result;
+  }
+
+  /// All pinned events for [personId], each paired with their Guest entry
+  /// (or null if they haven't been added to that event). Used by
+  /// PersonFollowUpScreen to show complete cross-event status.
+  List<(Event, Guest?)> pinnedEventsForPerson(String personId) {
+    return pinnedEvents.map((e) => (e, e.guestFor(personId))).toList();
+  }
+
+  /// Everyone who needs follow-up on at least one pinned event, sorted
+  /// by their oldest effective contact date across all their pinned-event
+  /// guest entries (null = never contacted = most urgent = first).
+  /// Each entry is (Person, [events where they need follow-up]).
+  List<(Person, List<Event>)> globalFollowUpList() {
+    // Collect all pinned events once.
+    final pinned = pinnedEvents;
+
+    // For each person, find which pinned events need follow-up.
+    final result = <(Person, List<Event>)>[];
+    for (final person in people) {
+      final needingEvents = <Event>[];
+      for (final event in pinned) {
+        final guest = event.guestFor(person.id);
+        if (guest != null && guest.needsFollowUp(event.isUpcoming)) {
+          needingEvents.add(event);
+        }
+      }
+      if (needingEvents.isNotEmpty) result.add((person, needingEvents));
+    }
+
+    // Sort by oldest effective contact date across all their pinned guest
+    // entries — the person who hasn't been contacted in the longest time
+    // appears first.
+    result.sort((a, b) {
+      final aDate = _oldestContactDate(a.$1.id, pinned);
+      final bDate = _oldestContactDate(b.$1.id, pinned);
+      if (aDate == null && bDate == null) return 0;
+      if (aDate == null) return -1; // never contacted → first
+      if (bDate == null) return 1;
+      return aDate.compareTo(bDate);
+    });
+
+    return result;
+  }
+
+  /// The oldest effectiveSortDate across all pinned events for [personId].
+  /// Returns null if they were never contacted on any pinned event.
+  SimpleDate? _oldestContactDate(String personId, List<Event> pinned) {
+    SimpleDate? oldest;
+    for (final event in pinned) {
+      final guest = event.guestFor(personId);
+      if (guest == null) continue;
+      final d = guest.effectiveSortDate();
+      if (d == null) return null; // never contacted on at least one → most urgent
+      if (oldest == null || d.isBefore(oldest)) oldest = d;
+    }
+    return oldest;
+  }
 }
 
 /// Top-level entry point for all data access. Composes the four

@@ -9,6 +9,7 @@ import '../providers/data_providers.dart';
 import '../repository/repository.dart';
 import 'event_detail_screen.dart';
 import 'person_editor_screen.dart';
+import 'person_follow_up_screen.dart';
 
 /// Read-only detail view for one person: contact platforms, global
 /// notes, interest tags, and every event they're on with their RSVP
@@ -54,6 +55,18 @@ class PersonDetailScreen extends ConsumerWidget {
       appBar: AppBar(
         title: Text(person.name),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined),
+            tooltip: 'Follow up',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      PersonFollowUpScreen(personId: person.id),
+                ),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.edit_outlined),
             tooltip: 'Edit',

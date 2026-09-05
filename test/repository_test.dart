@@ -1348,4 +1348,172 @@ void main() {
       expect(reloaded.interests.first.tag, boardGames.id);
     });
   });
+
+  group('DataSnapshot.pinnedEvents and pinnedEventsForPerson', () {
+    test('pinnedEvents returns only pinned events sorted date descending',
+        () async {
+      final e1 = await repo.events.create(
+        name: 'Old Hike',
+        date: const SimpleDate(year: 2026, month: 1, day: 1),
+        pinned: true,
+      );
+      final e2 = await repo.events.create(
+        name: 'New Hike',
+        date: const SimpleDate(year: 2026, month: 6, day: 1),
+        pinned: true,
+      );
+      await repo.events.create(
+        name: 'Unpinned',
+        date: const SimpleDate(year: 2026, month: 3, day: 1),
+        pinned: false,
+      );
+
+      final snapshot = await repo.loadAll();
+      final pinned = snapshot.pinnedEvents;
+      expect(pinned, hasLength(2));
+      // Most recent first.
+      expect(pinned[0].id, e2.id);
+      expect(pinned[1].id, e1.id);
+    });
+
+    test('pinnedEventsForPerson returns Guest for events person is on, '
+        'null for events they are not', () async {
+      final alice = await repo.people.create(name: 'Alice Chen');
+      var e1 = await repo.events.create(
+        name: 'Hike A',
+        date: const SimpleDate(year: 2026, month: 6, day: 1),
+        pinned: true,
+      );
+      final e2 = await repo.events.create(
+        name: 'Hike B',
+        date: const SimpleDate(year: 2026, month: 7, day: 1),
+        pinned: true,
+      );
+      e1 = e1.copyWith(guests: [
+        Guest(
+          personId: alice.id,
+          rsvp: RsvpStatus.noResponse,
+          invitedVia: InviteMethod.dm,
+        ),
+      ]);
+      await repo.saveEvent(e1);
+
+      final snapshot = await repo.loadAll();
+      final entries = snapshot.pinnedEventsForPerson(alice.id);
+      expect(entries, hasLength(2));
+      // e2 is more recent so comes first (pinnedEvents is date descending)
+      final e2Entry = entries.firstWhere((e) => e.$1.id == e2.id);
+      final e1Entry = entries.firstWhere((e) => e.$1.id == e1.id);
+      expect(e2Entry.$2, isNull); // not on e2
+      expect(e1Entry.$2, isNotNull); // on e1
+      expect(e1Entry.$2!.rsvp, RsvpStatus.noResponse);
+    });
+  });
+
+  group('DataSnapshot.globalFollowUpList', () {
+    test('returns only people who need follow-up on at least one pinned event',
+        () async {
+      final alice = await repo.people.create(name: 'Alice Chen');
+      final bob = await repo.people.create(name: 'Bob Smith');
+
+      var event = await repo.events.create(
+        name: 'Hike',
+        date: const SimpleDate(year: 2099, month: 6, day: 1),
+        pinned: true,
+      );
+      event = event.copyWith(guests: [
+        // Alice needs follow-up (toInvite, no last contact).
+        Guest(
+          personId: alice.id,
+          rsvp: RsvpStatus.toInvite,
+          invitedVia: InviteMethod.dm,
+        ),
+        // Bob is confirmed — no follow-up needed.
+        Guest(
+          personId: bob.id,
+          rsvp: RsvpStatus.yes,
+          invitedVia: InviteMethod.dm,
+          lastFollowUp: SimpleDate.today(),
+        ),
+      ]);
+      await repo.saveEvent(event);
+
+      final snapshot = await repo.loadAll();
+      final list = snapshot.globalFollowUpList();
+      expect(list, hasLength(1));
+      expect(list.first.$1.name, 'Alice Chen');
+    });
+
+    test('sorts by oldest effective contact date, never-contacted first',
+        () async {
+      final alice = await repo.people.create(name: 'Alice Chen');
+      final bob = await repo.people.create(name: 'Bob Smith');
+      final carol = await repo.people.create(name: 'Carol Diaz');
+
+      var event = await repo.events.create(
+        name: 'Hike',
+        date: const SimpleDate(year: 2099, month: 6, day: 1),
+        pinned: true,
+      );
+      event = event.copyWith(guests: [
+        // Carol: never contacted (null lastFollowUp) → most urgent.
+        Guest(
+          personId: carol.id,
+          rsvp: RsvpStatus.noResponse,
+          invitedVia: InviteMethod.dm,
+        ),
+        // Alice: contacted a month ago → second.
+        Guest(
+          personId: alice.id,
+          rsvp: RsvpStatus.noResponse,
+          invitedVia: InviteMethod.dm,
+          lastFollowUp: const SimpleDate(year: 2026, month: 1, day: 1),
+        ),
+        // Bob: contacted more recently → last.
+        Guest(
+          personId: bob.id,
+          rsvp: RsvpStatus.noResponse,
+          invitedVia: InviteMethod.dm,
+          lastFollowUp: const SimpleDate(year: 2026, month: 5, day: 1),
+        ),
+      ]);
+      await repo.saveEvent(event);
+
+      final snapshot = await repo.loadAll();
+      final list = snapshot.globalFollowUpList();
+      expect(list, hasLength(3));
+      expect(list[0].$1.name, 'Carol Diaz'); // never contacted
+      expect(list[1].$1.name, 'Alice Chen'); // oldest contact
+      expect(list[2].$1.name, 'Bob Smith'); // most recent contact
+    });
+
+    test('each entry includes which events need follow-up for that person',
+        () async {
+      final alice = await repo.people.create(name: 'Alice Chen');
+      var e1 = await repo.events.create(
+        name: 'Hike A',
+        date: const SimpleDate(year: 2099, month: 6, day: 1),
+        pinned: true,
+      );
+      var e2 = await repo.events.create(
+        name: 'Hike B',
+        date: const SimpleDate(year: 2099, month: 7, day: 1),
+        pinned: true,
+      );
+      final aliceGuest = Guest(
+        personId: alice.id,
+        rsvp: RsvpStatus.toInvite,
+        invitedVia: InviteMethod.dm,
+      );
+      e1 = e1.copyWith(guests: [aliceGuest]);
+      e2 = e2.copyWith(guests: [aliceGuest]);
+      await repo.saveEvent(e1);
+      await repo.saveEvent(e2);
+
+      final snapshot = await repo.loadAll();
+      final list = snapshot.globalFollowUpList();
+      expect(list, hasLength(1));
+      expect(list.first.$2, hasLength(2));
+    });
+  });
 }

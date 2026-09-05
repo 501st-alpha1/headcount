@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/enums.dart';
 import '../../models/guest.dart';
 import '../../models/person.dart';
+import '../person_follow_up_screen.dart';
 
 /// The statuses where last-contact info is meaningful to show inline —
 /// resolved statuses (yes/no) don't need it since there's nothing to chase.
@@ -31,6 +32,14 @@ class GuestRow extends StatelessWidget {
     required this.needsFollowUp,
     required this.onTap,
   });
+
+  void _openFollowUpScreen(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PersonFollowUpScreen(personId: person.id),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -75,6 +84,12 @@ class GuestRow extends StatelessWidget {
             ),
             const SizedBox(width: 8),
           ],
+          IconButton(
+            icon: const Icon(Icons.person_search_outlined),
+            tooltip: 'Follow up with ${person.name}',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => _openFollowUpScreen(context),
+          ),
           _RsvpChip(status: guest.rsvp),
         ],
       ),
