@@ -272,7 +272,14 @@ class DataSnapshot {
   /// sorted by date descending so the most relevant are first.
   List<Event> get pinnedEvents {
     final result = events.where((e) => e.pinned).toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
+      ..sort((a, b) {
+        if (a.date == null && b.date == null) {
+          return a.name.compareTo(b.name);
+        }
+        if (a.date == null) return 1;
+        if (b.date == null) return -1;
+        return b.date!.compareTo(a.date!);
+    });
     return result;
   }
 
