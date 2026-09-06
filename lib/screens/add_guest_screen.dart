@@ -139,7 +139,14 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
         .where((e) => e.id != event.id && e.guests.isNotEmpty)
         .where((e) => query.isEmpty || e.name.toLowerCase().contains(query))
         .toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
+      ..sort((a, b) {
+          final aDate = a.date;
+          final bDate = b.date;
+
+          if (aDate == null) return 1;
+          if (bDate == null) return -1;
+          return bDate.compareTo(aDate);
+      });
 
     if (matchingPeople.isEmpty && matchingGroups.isEmpty &&
         matchingTags.isEmpty && matchingEvents.isEmpty) {
@@ -182,7 +189,7 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
               leading: const Icon(Icons.event_outlined),
               title: Text(other.name),
               subtitle: Text(
-                '${other.date.toIsoString()} · ${other.guests.length} '
+                '${other.date?.toIsoString() ?? 'No date'} · ${other.guests.length} '
                 '${other.guests.length == 1 ? "guest" : "guests"}',
               ),
               onTap: () => _addFromEvent(event, other),

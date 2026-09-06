@@ -365,7 +365,10 @@ class _EventMetaHeader extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(event.date.toIsoString(), style: theme.textTheme.bodyMedium),
+        Text(
+          event.date?.toIsoString() ?? 'No date yet',
+          style: theme.textTheme.bodyMedium,
+        ),
         if (event.description.isNotEmpty) ...[
           const SizedBox(height: 4),
           Text(event.description, style: theme.textTheme.bodyMedium),

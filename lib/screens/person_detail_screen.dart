@@ -49,7 +49,14 @@ class PersonDetailScreen extends ConsumerWidget {
     }
 
     final eventsAndGuests = snapshot.eventsFor(personId)
-      ..sort((a, b) => b.$1.date.compareTo(a.$1.date));
+      ..sort((a, b) {
+          final aDate = a.$1.date;
+          final bDate = b.$1.date;
+
+          if (aDate == null) return 1;
+          if (bDate == null) return -1;
+          return bDate.compareTo(aDate);
+      });
 
     return Scaffold(
       appBar: AppBar(
@@ -228,7 +235,7 @@ class _EventRsvpRow extends StatelessWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(event.name),
-      subtitle: Text(event.date.toIsoString()),
+      subtitle: Text(event.date?.toIsoString() ?? 'No date'),
       trailing: Text(guest.rsvp.label),
       onTap: onTap,
     );

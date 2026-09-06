@@ -239,7 +239,7 @@ class _EventRow extends StatelessWidget {
             : null,
       ),
       subtitle: Text(
-        '${event.date.toIsoString()} · $subtitle',
+        '${event.date?.toIsoString() ?? 'No date'} · $subtitle',
         style: notAdded
             ? TextStyle(color: theme.colorScheme.onSurfaceVariant)
             : null,
