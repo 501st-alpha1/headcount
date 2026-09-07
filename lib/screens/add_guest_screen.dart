@@ -32,6 +32,7 @@ class AddGuestScreen extends ConsumerStatefulWidget {
 class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
   final _searchController = TextEditingController();
   String _query = '';
+  final Set<String> _expandedSections = {};
 
   /// When non-null, we're showing the interest-level browser for this
   /// tag instead of the main search results.
@@ -160,9 +161,22 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
 
     return ListView(
       children: [
-        if (matchingTags.isNotEmpty) ...[
-          const _ResultSectionHeader(label: 'Interests'),
-          for (final tag in matchingTags)
+        if (matchingTags.isNotEmpty)
+        _CollapsibleResultSection(
+          label: 'Interests',
+          count: matchingTags.length,
+          expanded: _expandedSections.contains('interests'),
+          onExpansionChanged: (expanded) {
+            setState(() {
+                if (expanded) {
+                  _expandedSections.add('interests');
+                } else {
+                  _expandedSections.remove('interests');
+                }
+            });
+          },
+          children: [
+            for (final tag in matchingTags)
             ListTile(
               leading: const Icon(Icons.interests_outlined),
               title: Text(tag.name),
@@ -171,20 +185,48 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
               ),
               onTap: () => setState(() => _browsingTag = tag),
             ),
-        ],
-        if (matchingGroups.isNotEmpty) ...[
-          const _ResultSectionHeader(label: 'Groups'),
-          for (final group in matchingGroups)
+          ],
+        ),
+        if (matchingGroups.isNotEmpty)
+        _CollapsibleResultSection(
+          label: 'Groups',
+          count: matchingGroups.length,
+          expanded: _expandedSections.contains('groups'),
+          onExpansionChanged: (expanded) {
+            setState(() {
+                if (expanded) {
+                  _expandedSections.add('groups');
+                } else {
+                  _expandedSections.remove('groups');
+                }
+            });
+          },
+          children: [
+            for (final group in matchingGroups)
             ListTile(
               leading: const Icon(Icons.groups_outlined),
               title: Text(group.name),
               subtitle: Text('${group.memberIds.length} members'),
               onTap: () => _inviteGroup(event, group),
             ),
-        ],
-        if (matchingEvents.isNotEmpty) ...[
-          const _ResultSectionHeader(label: 'From another event'),
-          for (final other in matchingEvents)
+          ],
+        ),
+        if (matchingEvents.isNotEmpty)
+        _CollapsibleResultSection(
+          label: 'From another event',
+          count: matchingEvents.length,
+          expanded: _expandedSections.contains('events'),
+          onExpansionChanged: (expanded) {
+            setState(() {
+                if (expanded) {
+                  _expandedSections.add('events');
+                } else {
+                  _expandedSections.remove('events');
+                }
+            });
+          },
+          children: [
+            for (final other in matchingEvents)
             ListTile(
               leading: const Icon(Icons.event_outlined),
               title: Text(other.name),
@@ -194,7 +236,8 @@ class _AddGuestScreenState extends ConsumerState<AddGuestScreen> {
               ),
               onTap: () => _addFromEvent(event, other),
             ),
-        ],
+          ],
+        ),
         if (matchingPeople.isNotEmpty) ...[
           const _ResultSectionHeader(label: 'People'),
           for (final person in matchingPeople)
@@ -427,6 +470,47 @@ class _ResultSectionHeader extends StatelessWidget {
           color: theme.colorScheme.primary,
         ),
       ),
+    );
+  }
+}
+
+class _CollapsibleResultSection extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool expanded;
+  final ValueChanged<bool> onExpansionChanged;
+  final List<Widget> children;
+
+  const _CollapsibleResultSection({
+      required this.label,
+      required this.count,
+      required this.expanded,
+      required this.onExpansionChanged,
+      required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return ExpansionTile(
+      initiallyExpanded: expanded,
+      onExpansionChanged: onExpansionChanged,
+      title: Text(label),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$count',
+            style: theme.textTheme.labelLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Icon(Icons.expand_more),
+        ],
+      ),
+      children: children,
     );
   }
 }
