@@ -625,4 +625,27 @@ class Repository {
 
     return event.copyWith(guests: [...event.guests, ...newGuests]);
   }
+
+  Event markGroupFollowedUp({
+    required Event event,
+    required Group group,
+  }) {
+    final groupMemberIds = group.memberIds.toSet();
+    final today = SimpleDate.today();
+
+    final updatedGuests = event.guests.map((guest) {
+      if (!groupMemberIds.contains(guest.personId)) {
+        return guest;
+      }
+
+      return guest.copyWith(
+        followUpCount: guest.followUpCount + 1,
+        lastFollowUp: today,
+        followUpSuppressed: false,
+        clearSnooze: true,
+      );
+    }).toList();
+
+    return event.copyWith(guests: updatedGuests);
+  }
 }

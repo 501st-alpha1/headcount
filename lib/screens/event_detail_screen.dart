@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/enums.dart';
 import '../models/event.dart';
 import '../models/event_question.dart';
+import '../models/group.dart';
 import '../models/guest.dart';
 import '../models/person.dart';
 import '../providers/data_providers.dart';
@@ -188,6 +189,16 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
               onSelected: (f) => setState(() => _filter = f),
             ),
           ),
+          if (_filter == _GuestFilter.all && _searchQuery.isEmpty)
+            _GroupsSection(
+              event: event,
+              groups: dataSnapshot.groups,
+              onMarkFollowedUp: (group) => _markGroupFollowedUp(
+                context,
+                event!,
+                group,
+              ),
+            ),
           Expanded(
             child: grouped.isEmpty
                 ? Center(
@@ -352,6 +363,90 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
     await repository.saveEvent(updatedEvent);
     await ref.read(dataSnapshotProvider.notifier).reload();
   }
+
+  Future<void> _markGroupFollowedUp(
+    BuildContext context,
+    Event event,
+    Group group,
+  ) async {
+    final eventGuestIds = event.guests.map((g) => g.personId).toSet();
+    final eventMemberIds =
+    group.memberIds.where(eventGuestIds.contains).toSet();
+    final skippedCount = group.memberIds.length - eventMemberIds.length;
+
+    if (eventMemberIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'No members of ${group.name} have been added to this event.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final message = StringBuffer(
+      'This will mark ${eventMemberIds.length} '
+      'event ${eventMemberIds.length == 1 ? 'guest' : 'guests'} '
+      'as followed up.',
+    );
+
+    if (skippedCount > 0) {
+      message.write(
+        '\n\nSkipping $skippedCount '
+        '${skippedCount == 1 ? 'group member' : 'group members'} '
+        'who ${skippedCount == 1 ? "hasn't" : "haven't"} been added to this event.',
+      );
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Follow up with ${group.name}?'),
+        content: Text(message.toString()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Mark followed up'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final repository = ref.read(repositoryProvider);
+      final updatedEvent = repository.markGroupFollowedUp(
+        event: event,
+        group: group,
+      );
+
+      await repository.saveEvent(updatedEvent);
+      await ref.read(dataSnapshotProvider.notifier).reload();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Logged follow-up for ${eventMemberIds.length} '
+              '${eventMemberIds.length == 1 ? 'person' : 'people'}.',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save: $e')),
+        );
+      }
+    }
+  }
 }
 
 class _EventMetaHeader extends StatelessWidget {
@@ -410,6 +505,72 @@ class _FilterChipsRow extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+class _GroupsSection extends StatefulWidget {
+  final Event event;
+  final List<Group> groups;
+  final ValueChanged<Group> onMarkFollowedUp;
+
+  const _GroupsSection({
+    required this.event,
+    required this.groups,
+    required this.onMarkFollowedUp,
+  });
+
+  @override
+  State<_GroupsSection> createState() => _GroupsSectionState();
+}
+
+class _GroupsSectionState extends State<_GroupsSection> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final eventGuestIds = widget.event.guests.map((g) => g.personId).toSet();
+
+    final groups = widget.groups
+        .map(
+          (group) => (
+            group: group,
+            memberCount:
+                group.memberIds.where(eventGuestIds.contains).length,
+          ),
+        )
+        .where((entry) => entry.memberCount > 0)
+        .toList()
+      ..sort((a, b) => a.group.name.compareTo(b.group.name));
+
+    if (groups.isEmpty) return const SizedBox.shrink();
+
+    return ExpansionTile(
+      initiallyExpanded: false,
+      onExpansionChanged: (expanded) {
+        setState(() => _expanded = expanded);
+      },
+      title: const Text('Groups'),
+      trailing: Text(
+        '${groups.length}',
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+      ),
+      children: [
+        for (final entry in groups)
+          ListTile(
+            title: Text(entry.group.name),
+            subtitle: Text(
+              '${entry.memberCount} '
+              '${entry.memberCount == 1 ? 'person' : 'people'} in this event',
+            ),
+            trailing: FilledButton.tonal(
+              onPressed: () => widget.onMarkFollowedUp(entry.group),
+              child: const Text('Followed up'),
+            ),
+          ),
+      ],
     );
   }
 }
