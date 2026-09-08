@@ -189,46 +189,51 @@ class _EventDetailScreenState extends ConsumerState<EventDetailScreen> {
               onSelected: (f) => setState(() => _filter = f),
             ),
           ),
-          if (_filter == _GuestFilter.all && _searchQuery.isEmpty)
-            _GroupsSection(
-              event: event,
-              groups: dataSnapshot.groups,
-              onMarkFollowedUp: (group) => _markGroupFollowedUp(
-                context,
-                event!,
-                group,
-              ),
-            ),
           Expanded(
-            child: grouped.isEmpty
-                ? Center(
+            child: ListView(
+              children: [
+                if (_filter == _GuestFilter.all && _searchQuery.isEmpty)
+                _GroupsSection(
+                  event: event,
+                  groups: dataSnapshot.groups,
+                  onMarkFollowedUp: (group) => _markGroupFollowedUp(
+                    context,
+                    event!,
+                    group,
+                  ),
+                ),
+
+                if (grouped.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Center(
                     child: Text(
                       _searchQuery.isEmpty
                           ? 'No guests match this filter.'
                           : 'No results for "$_searchQuery".',
                     ),
-                  )
-                : ListView(
-                    children: [
-                      for (final group in grouped) ...[
-                        _SectionHeader(label: group.$1),
-                        for (final pair in group.$2)
-                          GuestRow(
-                            guest: pair.$1,
-                            person: pair.$2,
-                            needsFollowUp:
-                                pair.$1.needsFollowUp(event!.isUpcoming),
-                            onTap: () => _openRsvpSheet(
-                              context,
-                              dataSnapshot,
-                              event!,
-                              pair.$1,
-                              pair.$2,
-                            ),
-                          ),
-                      ],
-                    ],
                   ),
+                )
+                else
+                for (final group in grouped) ...[
+                  _SectionHeader(label: group.$1),
+                  for (final pair in group.$2)
+                    GuestRow(
+                      guest: pair.$1,
+                      person: pair.$2,
+                      needsFollowUp:
+                      pair.$1.needsFollowUp(event.isUpcoming),
+                      onTap: () => _openRsvpSheet(
+                        context,
+                        dataSnapshot,
+                        event!,
+                        pair.$1,
+                        pair.$2,
+                      ),
+                    ),
+                ],
+              ],
+            ),
           ),
         ],
       ),
@@ -525,8 +530,6 @@ class _GroupsSection extends StatefulWidget {
 }
 
 class _GroupsSectionState extends State<_GroupsSection> {
-  bool _expanded = false;
-
   @override
   Widget build(BuildContext context) {
     final eventGuestIds = widget.event.guests.map((g) => g.personId).toSet();
@@ -546,16 +549,19 @@ class _GroupsSectionState extends State<_GroupsSection> {
     if (groups.isEmpty) return const SizedBox.shrink();
 
     return ExpansionTile(
-      initiallyExpanded: false,
-      onExpansionChanged: (expanded) {
-        setState(() => _expanded = expanded);
-      },
       title: const Text('Groups'),
-      trailing: Text(
-        '${groups.length}',
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '${groups.length}',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(width: 8),
+          const Icon(Icons.expand_more),
+        ],
       ),
       children: [
         for (final entry in groups)
