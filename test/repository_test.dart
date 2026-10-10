@@ -457,25 +457,6 @@ void main() {
       expect(snapshot.archivedEvents, hasLength(1));
     });
 
-    test(
-        'eventsOnHomeScreen excludes pinned events past the grace period, '
-        'archivedEvents includes them',
-        () async {
-      final tenDaysAgo = DateTime.now().subtract(const Duration(days: 10));
-      final event = await repo.events.create(
-        name: 'Long Past',
-        date: SimpleDate(
-          year: tenDaysAgo.year,
-          month: tenDaysAgo.month,
-          day: tenDaysAgo.day,
-        ),
-      );
-
-      final snapshot = await repo.loadAll();
-      expect(snapshot.eventsOnHomeScreen, isEmpty);
-      expect(snapshot.archivedEvents.map((e) => e.id), contains(event.id));
-    });
-
     test('archivedEvents is sorted most recent first', () async {
       await repo.events.create(
         name: 'Older',

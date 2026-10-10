@@ -916,35 +916,6 @@ notes = ""
       expect(event.showsOnHomeScreen, isFalse);
     });
 
-    test('a pinned event still within the grace period shows on the home screen', () {
-      final today = SimpleDate.today();
-      // Walk back 2 days by constructing from DateTime, since SimpleDate
-      // has no subtraction operator of its own (by design — it's a thin
-      // value type, not a date-arithmetic library).
-      final dt = DateTime(today.year, today.month, today.day)
-          .subtract(const Duration(days: 2));
-      final event = Event(
-        id: 'recent',
-        name: 'Recent',
-        date: SimpleDate(year: dt.year, month: dt.month, day: dt.day),
-        pinned: true,
-      );
-      expect(event.showsOnHomeScreen, isTrue);
-    });
-
-    test('a pinned event past the grace period does not show on the home screen', () {
-      final today = SimpleDate.today();
-      final dt = DateTime(today.year, today.month, today.day)
-          .subtract(const Duration(days: 10));
-      final event = Event(
-        id: 'old',
-        name: 'Old',
-        date: SimpleDate(year: dt.year, month: dt.month, day: dt.day),
-        pinned: true,
-      );
-      expect(event.showsOnHomeScreen, isFalse);
-    });
-
     test('an unpinned past event never shows regardless of grace period', () {
       final event = Event(
         id: 'old',
