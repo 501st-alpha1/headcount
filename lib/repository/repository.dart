@@ -304,7 +304,13 @@ class DataSnapshot {
       final needingEvents = <Event>[];
       for (final event in pinned) {
         final guest = event.guestFor(person.id);
-        if (guest != null && guest.needsFollowUp(event.isUpcoming)) {
+        // toInvite counts as "needs follow-up" within an event, but for
+        // the global list we only surface people you've already been in
+        // contact with and need to chase — uninvited guests are a
+        // deliberate "to-do" not an overdue follow-up.
+        if (guest != null &&
+            guest.rsvp != RsvpStatus.toInvite &&
+            guest.needsFollowUp(event.isUpcoming)) {
           needingEvents.add(event);
         }
       }

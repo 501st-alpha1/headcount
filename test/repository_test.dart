@@ -1411,6 +1411,30 @@ void main() {
   });
 
   group('DataSnapshot.globalFollowUpList', () {
+    test('toInvite guests do not trigger the global follow-up list',
+        () async {
+      final alice = await repo.people.create(name: 'Alice Chen');
+      var event = await repo.events.create(
+        name: 'Hike',
+        date: const SimpleDate(year: 2099, month: 6, day: 1),
+        pinned: true,
+      );
+      event = event.copyWith(guests: [
+        // Alice is toInvite — should NOT appear in global follow-up list.
+        Guest(
+          personId: alice.id,
+          rsvp: RsvpStatus.toInvite,
+          invitedVia: InviteMethod.dm,
+        ),
+      ]);
+      await repo.saveEvent(event);
+
+      final snapshot = await repo.loadAll();
+      final list = snapshot.globalFollowUpList();
+      expect(list, isEmpty,
+          reason: 'toInvite should not trigger global follow-up');
+    });
+
     test('returns only people who need follow-up on at least one pinned event',
         () async {
       final alice = await repo.people.create(name: 'Alice Chen');
@@ -1425,7 +1449,7 @@ void main() {
         // Alice needs follow-up (toInvite, no last contact).
         Guest(
           personId: alice.id,
-          rsvp: RsvpStatus.toInvite,
+          rsvp: RsvpStatus.maybe,
           invitedVia: InviteMethod.dm,
         ),
         // Bob is confirmed — no follow-up needed.
@@ -1502,7 +1526,7 @@ void main() {
       );
       final aliceGuest = Guest(
         personId: alice.id,
-        rsvp: RsvpStatus.toInvite,
+        rsvp: RsvpStatus.maybe,
         invitedVia: InviteMethod.dm,
       );
       e1 = e1.copyWith(guests: [aliceGuest]);

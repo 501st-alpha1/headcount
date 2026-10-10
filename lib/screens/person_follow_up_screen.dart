@@ -55,7 +55,10 @@ class _PersonFollowUpScreenState extends ConsumerState<PersonFollowUpScreen> {
       );
     }
 
-    final eventEntries = snapshot.pinnedEventsForPerson(widget.personId);
+    // Soonest event first — you want to prioritize what's coming up soon.
+    // pinnedEventsForPerson returns date-descending, so we reverse it.
+    final eventEntries =
+        snapshot.pinnedEventsForPerson(widget.personId).reversed.toList();
 
     // Default: pre-check events where this person needs follow-up,
     // but only on first build (don't reset after user changes).
@@ -148,20 +151,40 @@ class _PersonFollowUpScreenState extends ConsumerState<PersonFollowUpScreen> {
         if (event == null) continue;
 
         final guest = event.guestFor(widget.personId);
-        if (guest == null) continue; // shouldn't happen for checked events
+        final Event updatedEvent;
 
-        final updatedGuest = guest.copyWith(
-          followUpCount: guest.followUpCount + 1,
-          lastFollowUp: today,
-          // Logging a follow-up lifts suppression and clears any snooze.
-          followUpSuppressed: false,
-          clearSnooze: true,
-        );
-        final updatedEvent = event.copyWith(
-          guests: event.guests
-              .map((g) => g.personId == widget.personId ? updatedGuest : g)
-              .toList(),
-        );
+        if (guest == null) {
+          // Person wasn't on this event — add them with noResponse since
+          // we're logging a follow-up (i.e. we just invited them).
+          final newGuest = Guest(
+            personId: widget.personId,
+            rsvp: RsvpStatus.noResponse,
+            invitedVia: InviteMethod.dm,
+            lastFollowUp: today,
+          );
+          updatedEvent = event.copyWith(
+            guests: [...event.guests, newGuest],
+          );
+        } else {
+          // Auto-promote toInvite → noResponse when logging a follow-up,
+          // since logging a follow-up means we've now contacted them.
+          final promotedRsvp = guest.rsvp == RsvpStatus.toInvite
+              ? RsvpStatus.noResponse
+              : guest.rsvp;
+          final updatedGuest = guest.copyWith(
+            rsvp: promotedRsvp,
+            followUpCount: guest.followUpCount + 1,
+            lastFollowUp: today,
+            // Logging a follow-up lifts suppression and clears any snooze.
+            followUpSuppressed: false,
+            clearSnooze: true,
+          );
+          updatedEvent = event.copyWith(
+            guests: event.guests
+                .map((g) => g.personId == widget.personId ? updatedGuest : g)
+                .toList(),
+          );
+        }
         await repository.saveEvent(updatedEvent);
       }
 
@@ -215,7 +238,7 @@ class _EventRow extends StatelessWidget {
 
     String subtitle;
     if (notAdded) {
-      subtitle = 'Not added to this event';
+      subtitle = 'Not added — checking will invite them with No response';
     } else {
       final parts = <String>[g.rsvp.label];
       if (g.lastFollowUp != null) {
@@ -229,9 +252,10 @@ class _EventRow extends StatelessWidget {
     }
 
     return CheckboxListTile(
-      value: notAdded ? false : checked,
-      // Can't log follow-up for someone not on the event.
-      onChanged: notAdded ? null : (v) => onChanged(v ?? false),
+      value: checked,
+      // Not-added rows are checkable — checking them will add the person
+      // to the event with noResponse status on save.
+      onChanged: (v) => onChanged(v ?? false),
       title: Text(
         event.name,
         style: notAdded
@@ -245,7 +269,7 @@ class _EventRow extends StatelessWidget {
             : null,
       ),
       secondary: notAdded
-          ? Icon(Icons.person_off_outlined,
+          ? Icon(Icons.person_add_outlined,
               color: theme.colorScheme.onSurfaceVariant)
           : _statusIcon(g!, theme),
     );

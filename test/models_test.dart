@@ -838,6 +838,63 @@ notes = ""
     });
   });
 
+  group('Guest follow-up promotion behavior', () {
+    test('logging a follow-up on a toInvite guest auto-promotes to noResponse',
+        () {
+      // The PersonFollowUpScreen applies this promotion when marking
+      // followed-up — verify the logic here at the model level.
+      const guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.toInvite,
+        invitedVia: InviteMethod.dm,
+      );
+      // Simulate what _markFollowedUp does: promote rsvp if toInvite.
+      final promotedRsvp =
+          guest.rsvp == RsvpStatus.toInvite ? RsvpStatus.noResponse : guest.rsvp;
+      final updated = guest.copyWith(
+        rsvp: promotedRsvp,
+        followUpCount: guest.followUpCount + 1,
+        lastFollowUp: SimpleDate.today(),
+        followUpSuppressed: false,
+        clearSnooze: true,
+      );
+      expect(updated.rsvp, RsvpStatus.noResponse);
+      expect(updated.followUpCount, 1);
+      expect(updated.lastFollowUp, SimpleDate.today());
+    });
+
+    test('logging a follow-up on a noResponse guest does not change the rsvp',
+        () {
+      const guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.noResponse,
+        invitedVia: InviteMethod.dm,
+        lastFollowUp: SimpleDate(year: 2026, month: 1, day: 1),
+      );
+      final promotedRsvp =
+          guest.rsvp == RsvpStatus.toInvite ? RsvpStatus.noResponse : guest.rsvp;
+      final updated = guest.copyWith(
+        rsvp: promotedRsvp,
+        followUpCount: guest.followUpCount + 1,
+        lastFollowUp: SimpleDate.today(),
+      );
+      expect(updated.rsvp, RsvpStatus.noResponse);
+      expect(updated.followUpCount, 1);
+    });
+
+    test('logging a follow-up on a maybe guest does not change the rsvp', () {
+      const guest = Guest(
+        personId: 'p',
+        rsvp: RsvpStatus.maybe,
+        invitedVia: InviteMethod.dm,
+      );
+      final promotedRsvp =
+          guest.rsvp == RsvpStatus.toInvite ? RsvpStatus.noResponse : guest.rsvp;
+      final updated = guest.copyWith(rsvp: promotedRsvp);
+      expect(updated.rsvp, RsvpStatus.maybe);
+    });
+  });
+
   group('Event.showsOnHomeScreen', () {
     test('an upcoming pinned event shows on the home screen', () {
       final event = Event(
